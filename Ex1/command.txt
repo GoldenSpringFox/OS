@@ -1,0 +1,1 @@
+g++ -Wall -Werror -Wpedantic --std=c++17 -I. uthreads.cpp tests/test_1_kick_tires.cpp -o program
