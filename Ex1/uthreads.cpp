@@ -1,8 +1,28 @@
 #include "uthreads.h"
 
 #include <iostream>
+#include <queue>
 #include <set>
 
+
+/**************************************************
+*                                                 *
+*                  Variables                      *
+*                                                 *
+***************************************************/
+
+int runningThread;
+std::queue<int> readyThreads;
+std::set<int> blockedThreads;
+ThreadIdManager idManager;
+
+
+
+/**************************************************
+*                                                 *
+*                   Methods                       *
+*                                                 *
+***************************************************/
 
 /**
  * @brief initializes the thread library.
@@ -17,8 +37,8 @@
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_init(int quantum_usecs) {
-    std::cerr << "thread library error: " << "did not implement" << std::endl;
-    return -1;
+    runningThread = 0;
+    return 0;
 }
 
 /**
@@ -34,7 +54,11 @@ int uthread_init(int quantum_usecs) {
  * @return On success, return the ID of the created thread. On failure, return -1.
 */
 int uthread_spawn(thread_entry_point entry_point) {
-    std::cerr << "thread library error: " << "did not implement" << std::endl;
+    int id = idManager.getNewThreadId();
+    
+    if (id == -1) return -1;
+
+    readyThreads.push(id);
     return -1;
 }
 
@@ -112,8 +136,7 @@ int uthread_sleep(int num_quantums) {
  * @return The ID of the calling thread.
 */
 int uthread_get_tid() {
-    std::cerr << "thread library error: " << "did not implement" << std::endl;
-    return -1;
+    return 0;
 }
 
 
@@ -153,28 +176,30 @@ int uthread_get_quantums(int tid) {
 ***************************************************/
 
 class ThreadIdManager {
-    public:
-         
-            int getNewThreadId(){
-                if (!terminatedThreads.empty()) {
-                    auto smallestIdPointer = terminatedThreads.begin();
-                    int smallestId = *(smallestIdPointer);
-                    terminatedThreads.erase(smallestId);
-                    return smallestId;
-                }
+    private: 
+        std::set<int> terminatedThreads{};
+        int currentMaxId = 0;
 
-                if (currentMaxId < MAX_THREAD_NUM) {
-                    currentMaxId++;
-                    return currentMaxId;
-                }
-                
-                std::cerr << "ERROR: passed max threads number\n";
-                return -1;
-        
+    public:
+        int getNewThreadId(){
+            if (!terminatedThreads.empty()) {
+                auto smallestIdPointer = terminatedThreads.begin();
+                int smallestId = *(smallestIdPointer);
+                terminatedThreads.erase(smallestId);
+                return smallestId;
             }
 
+            if (currentMaxId < MAX_THREAD_NUM) {
+                currentMaxId++;
+                return currentMaxId;
+            }
+            
+            std::cerr << "ERROR: passed max threads number\n";
+            return -1;
+    
+        }
 
-        int removeThread(int id){
+        int removeThreadId(int id){
             if (id == currentMaxId) {
                 currentMaxId--;
                 while (terminatedThreads.count(currentMaxId)>0) {
@@ -191,8 +216,4 @@ class ThreadIdManager {
             terminatedThreads.insert(id);
             return 0;
         }
-
-    private: 
-        std::set <int> terminatedThreads;
-        int currentMaxId; 
 };

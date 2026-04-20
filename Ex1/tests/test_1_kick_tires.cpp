@@ -1,7 +1,6 @@
 #include "uthreads.h"
 #include <iostream>
 
-
 int main(int argc, char **argv) {
     int result = uthread_init(1000 * 1000);
     if (result != 0) {
