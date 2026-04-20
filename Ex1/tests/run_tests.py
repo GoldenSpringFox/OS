@@ -62,7 +62,7 @@ def compile_test(test_name, cpp_path, test_dir, parent_dir):
     """
 
     # Flatten and expand glob patterns
-    cmd = ['g++', '-Wall', '--std=c++17', '-o', 
+    cmd = ['g++', '-Wall', '--std=c++17', '-o', f'-I{parent_dir}',
            os.path.join(test_dir, f'{test_name}.out')]
     
     # Add all cpp files from parent directory
