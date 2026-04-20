@@ -1,0 +1,6 @@
+~~~ Links ~~~
+Rumba (VPN): http://rumba.huji.ac.il
+
+
+~~~ VSCode Shortcuts ~~~
+Copilot: ctrl + shift + I
