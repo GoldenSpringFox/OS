@@ -1,9 +1,85 @@
 #include "uthreads.h"
 
 #include <iostream>
-#include <queue>
+#include <map>
+#include <list>
 #include <set>
 #include <signal.h>
+
+
+/**************************************************
+*                                                 *
+*                   Classes                       *
+*                                                 *
+***************************************************/
+
+class ThreadIdManager {
+    private: 
+        std::set<int> terminatedThreads{};
+        int currentMaxId = 0;
+
+    public:
+        int getNewThreadId(){
+            if (!terminatedThreads.empty()) {
+                auto smallestIdPointer = terminatedThreads.begin();
+                int smallestId = *(smallestIdPointer);
+                terminatedThreads.erase(smallestId);
+                return smallestId;
+            }
+
+            if (currentMaxId < MAX_THREAD_NUM) {
+                currentMaxId++;
+                return currentMaxId;
+            }
+            
+            std::cerr << "ERROR: passed max threads number\n";
+            return -1;
+    
+        }
+
+        int removeThreadId(int id){
+            if (id == currentMaxId) {
+                currentMaxId--;
+                while (terminatedThreads.count(currentMaxId)>0) {
+                    terminatedThreads.erase(currentMaxId);
+                    currentMaxId--;
+                }
+                return 0;
+            }
+
+            if ((terminatedThreads.count(id) > 0) || (id < 0) || (id > currentMaxId)) {
+                return -1;
+            }
+
+            terminatedThreads.insert(id);
+            return 0;
+        }
+};
+
+class Thread {
+    public: 
+        int id;
+    private:     
+        thread_entry_point entry_point;
+        char* stack;
+
+    public: 
+        Thread(thread_entry_point entry_point, int id) {
+            this->entry_point = entry_point;
+            this->stack = new char[STACK_SIZE];
+            this->id = id;
+            if (this->id == -1) {
+                throw std::runtime_error("ERROR: passed max threads number");
+            }
+        }
+        
+        ~Thread() {
+            if (this->stack != nullptr) {
+                delete[] this->stack;
+                this->stack = nullptr;
+            }
+        }   
+};
 
 
 /**************************************************
@@ -13,9 +89,10 @@
 ***************************************************/
 
 int runningThread;
-std::queue<int> readyThreads;
+std::list<int> readyThreads;
 std::set<int> blockedThreads;
-ThreadIdManager idManager;
+std::map<int, Thread> threads;
+ThreadIdManager idManager = ThreadIdManager();
 
 
 
@@ -75,12 +152,10 @@ int uthread_spawn(thread_entry_point entry_point) {
     //     unblock_signal(SIGVTALRM);
     //     return -1;
     // } 
-    
-    //int id = idManager.getNewThreadId();
-    
-     if (id == -1) return -1;
-
-    readyThreads.push(id);
+    int tid = idManager.getNewThreadId();
+    Thread newThread(entry_point, tid);
+    threads.insert({newThread.id, newThread});
+    readyThreads.push_back(newThread.id);
     return -1;
 }
 
@@ -96,8 +171,19 @@ int uthread_spawn(thread_entry_point entry_point) {
  * itself or the main thread is terminated, the function does not return.
 */
 int uthread_terminate(int tid){
-    std::cerr << "thread library error: " << "did not implement" << std::endl;
-    return -1;
+    if (tid == 0) {
+        threads.clear();
+        exit(0);
+    }
+    if (threads.find(tid) == threads.end()) {
+        std::cerr << "ERROR: thread with id " << tid << " does not exist\n";
+        return -1;
+    }
+    threads.erase(tid);
+    readyThreads.remove(tid);
+    blockedThreads.erase(tid);
+    idManager.removeThreadId(tid);
+    return 0;
 }
 
 
@@ -216,86 +302,7 @@ void unblock_signal(int sig) {
 //     return newThread;
 // }
 
-/**************************************************
-*                                                 *
-*                   Structs                       *
-*                                                 *
-***************************************************/ 
 
 
-/**************************************************
-*                                                 *
-*                   Classes                       *
-*                                                 *
-***************************************************/
 
-class ThreadIdManager {
-    private: 
-        std::set<int> terminatedThreads{};
-        int currentMaxId = 0;
-
-    public:
-        int getNewThreadId(){
-            if (!terminatedThreads.empty()) {
-                auto smallestIdPointer = terminatedThreads.begin();
-                int smallestId = *(smallestIdPointer);
-                terminatedThreads.erase(smallestId);
-                return smallestId;
-            }
-
-            if (currentMaxId < MAX_THREAD_NUM) {
-                currentMaxId++;
-                return currentMaxId;
-            }
-            
-            std::cerr << "ERROR: passed max threads number\n";
-            return -1;
-    
-        }
-
-        int removeThreadId(int id){
-            if (id == currentMaxId) {
-                currentMaxId--;
-                while (terminatedThreads.count(currentMaxId)>0) {
-                    terminatedThreads.erase(currentMaxId);
-                    currentMaxId--;
-                }
-                return 0;
-            }
-
-            if ((terminatedThreads.count(id) > 0) || (id < 0) || (id > currentMaxId)) {
-                return -1;
-            }
-
-            terminatedThreads.insert(id);
-            return 0;
-        }
-};
-
-class Thread {
-    public: 
-        int id;
-    private:     
-        thread_entry_point entry_point;
-        char* stack;
-        int quantums;
-        bool isBlocked;
-
-
-    Thread(thread_entry_point entry_point) {
-        this->entry_point = entry_point;
-        this->stack = new char[STACK_SIZE];
-        //newThread.quantums = 0;
-        this->isBlocked = false;
-        this->id = idManager.getNewThreadId();
-        if (this->id == -1) {
-            throw std::runtime_error("ERROR: passed max threads number");
-        }
-    }
-    
-    void terminate() {
-        delete[] this->stack;   
-        this->stack = nullptr;
-    }
-};
 
