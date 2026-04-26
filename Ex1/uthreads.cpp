@@ -91,7 +91,7 @@ class Thread {
 int runningThread;
 std::list<int> readyThreads;
 std::set<int> blockedThreads;
-std::map<int, Thread> threads;
+std::map<int, Thread*> threads;
 ThreadIdManager idManager = ThreadIdManager();
 
 
@@ -115,6 +115,7 @@ ThreadIdManager idManager = ThreadIdManager();
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_init(int quantum_usecs) {
+    std::cout << "> INITIALIZE" << '\n';
     runningThread = 0;
     return 0;
 }
@@ -132,6 +133,7 @@ int uthread_init(int quantum_usecs) {
  * @return On success, return the ID of the created thread. On failure, return -1.
 */
 int uthread_spawn(thread_entry_point entry_point) {
+    std::cout << "> SPAWN\n";
     // block_signal(SIGVTALRM); 
     if (entry_point == nullptr) {
         std::cerr << "ERROR: entry point is null\n";
@@ -153,10 +155,11 @@ int uthread_spawn(thread_entry_point entry_point) {
     //     return -1;
     // } 
     int tid = idManager.getNewThreadId();
-    Thread newThread(entry_point, tid);
-    threads.insert({newThread.id, newThread});
-    readyThreads.push_back(newThread.id);
-    return -1;
+    Thread* newThread = new Thread(entry_point, tid);
+    threads.insert({newThread->id, newThread});
+    readyThreads.push_back(tid);
+    std::cout << "spawned thread with id: " << tid << '\n';
+    return tid;
 }
 
 
@@ -171,7 +174,11 @@ int uthread_spawn(thread_entry_point entry_point) {
  * itself or the main thread is terminated, the function does not return.
 */
 int uthread_terminate(int tid){
+    std::cout << "> TERMINATE" << '\n';
     if (tid == 0) {
+        for (std::map<int, Thread*>::iterator it = threads.begin(); it != threads.end(); ++it) {
+            delete it->second;
+        }
         threads.clear();
         exit(0);
     }
@@ -183,6 +190,7 @@ int uthread_terminate(int tid){
     readyThreads.remove(tid);
     blockedThreads.erase(tid);
     idManager.removeThreadId(tid);
+    std::cout << "deleted thread with id: " << tid << '\n';
     return 0;
 }
 
