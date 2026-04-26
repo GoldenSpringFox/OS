@@ -3,6 +3,7 @@
 #include <iostream>
 #include <queue>
 #include <set>
+#include <signal.h>
 
 
 /**************************************************
@@ -54,12 +55,37 @@ int uthread_init(int quantum_usecs) {
  * @return On success, return the ID of the created thread. On failure, return -1.
 */
 int uthread_spawn(thread_entry_point entry_point) {
-    int id = idManager.getNewThreadId();
+    block_signal(SIGVTALRM); 
+    if (entry_point == nullptr) {
+        std::cerr << "ERROR: entry point is null\n";
+        unblock_signal(SIGVTALRM);
+        return -1;
+    }
+    if (readyThreads.size() == MAX_THREAD_NUM - 1) { // -1 because the main thread is also a thread
+        std::cerr << "ERROR: passed max threads number\n";
+        unblock_signal(SIGVTALRM);
+        return -1;
+    }
+    try {
+        Thread newThread;
+        newThread.id = idManager.getNewThreadId();
+        newThread.entry_point = entry_point;
+        newThread.stack = new char[STACK_SIZE];
+        //newThread.quantums = 0;
+        readyThreads.push(newThread.id);
+        newThread.isBlocked = false;
+    } catch (std::bad_alloc& e) {
+        std::cerr << "ERROR: failed to allocate memory for thread stack\n";
+        unblock_signal(SIGVTALRM);
+        return -1;
+    } 
     
-    if (id == -1) return -1;
+    // int id = idManager.getNewThreadId();
+    
+    // if (id == -1) return -1;
 
-    readyThreads.push(id);
-    return -1;
+    // readyThreads.push(id);
+    // return -1;
 }
 
 
@@ -167,6 +193,46 @@ int uthread_get_quantums(int tid) {
     std::cerr << "thread library error: " << "did not implement" << std::endl;
     return -1;
 }
+
+// Helper function to block a specific signal (used for critical sections)
+void block_signal(int sig) {
+    sigset_t set; 
+    sigemptyset(&set); 
+    sigaddset(&set, sig); 
+    sigprocmask(SIG_BLOCK, &set, nullptr); 
+}
+
+// Helper function to unblock a specific signal (used for critical sections)
+void unblock_signal(int sig) {
+    sigset_t set; 
+    sigemptyset(&set); 
+    sigaddset(&set, sig); 
+    sigprocmask(SIG_UNBLOCK, &set, nullptr); 
+}
+
+// Thread createThread(thread_entry_point entry_point) {
+//     Thread newThread;
+//     newThread.id = id;
+//     newThread.entry_point = entry_point;
+//     newThread.stack = new char[STACK_SIZE];
+//     //newThread.quantums = 0;
+//     newThread.isBlocked = false;
+//     return newThread;
+// }
+
+/**************************************************
+*                                                 *
+*                   Structs                       *
+*                                                 *
+***************************************************/ 
+
+struct Thread {
+    int id;
+    thread_entry_point entry_point;
+    char* stack;
+    int quantums;
+    bool isBlocked;
+};
 
 
 /**************************************************
