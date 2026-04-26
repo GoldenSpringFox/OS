@@ -55,37 +55,33 @@ int uthread_init(int quantum_usecs) {
  * @return On success, return the ID of the created thread. On failure, return -1.
 */
 int uthread_spawn(thread_entry_point entry_point) {
-    block_signal(SIGVTALRM); 
+    // block_signal(SIGVTALRM); 
     if (entry_point == nullptr) {
         std::cerr << "ERROR: entry point is null\n";
-        unblock_signal(SIGVTALRM);
+        //unblock_signal(SIGVTALRM);
         return -1;
     }
     if (readyThreads.size() == MAX_THREAD_NUM - 1) { // -1 because the main thread is also a thread
         std::cerr << "ERROR: passed max threads number\n";
-        unblock_signal(SIGVTALRM);
+        //unblock_signal(SIGVTALRM);
         return -1;
     }
-    try {
-        Thread newThread;
-        newThread.id = idManager.getNewThreadId();
-        newThread.entry_point = entry_point;
-        newThread.stack = new char[STACK_SIZE];
-        //newThread.quantums = 0;
-        readyThreads.push(newThread.id);
-        newThread.isBlocked = false;
-    } catch (std::bad_alloc& e) {
-        std::cerr << "ERROR: failed to allocate memory for thread stack\n";
-        unblock_signal(SIGVTALRM);
-        return -1;
-    } 
+    // try {
+    //     Thread newThread = Thread().create(entry_point);
+    //     readyThreads.push(newThread.id);
+    //     newThread.isBlocked = false;
+    // } catch (std::bad_alloc& e) {
+    //     std::cerr << "ERROR: failed to allocate memory for thread stack\n";
+    //     unblock_signal(SIGVTALRM);
+    //     return -1;
+    // } 
     
-    // int id = idManager.getNewThreadId();
+    //int id = idManager.getNewThreadId();
     
-    // if (id == -1) return -1;
+     if (id == -1) return -1;
 
-    // readyThreads.push(id);
-    // return -1;
+    readyThreads.push(id);
+    return -1;
 }
 
 
@@ -226,14 +222,6 @@ void unblock_signal(int sig) {
 *                                                 *
 ***************************************************/ 
 
-struct Thread {
-    int id;
-    thread_entry_point entry_point;
-    char* stack;
-    int quantums;
-    bool isBlocked;
-};
-
 
 /**************************************************
 *                                                 *
@@ -283,3 +271,31 @@ class ThreadIdManager {
             return 0;
         }
 };
+
+class Thread {
+    public: 
+        int id;
+    private:     
+        thread_entry_point entry_point;
+        char* stack;
+        int quantums;
+        bool isBlocked;
+
+
+    Thread(thread_entry_point entry_point) {
+        this->entry_point = entry_point;
+        this->stack = new char[STACK_SIZE];
+        //newThread.quantums = 0;
+        this->isBlocked = false;
+        this->id = idManager.getNewThreadId();
+        if (this->id == -1) {
+            throw std::runtime_error("ERROR: passed max threads number");
+        }
+    }
+    
+    void terminate() {
+        delete[] this->stack;   
+        this->stack = nullptr;
+    }
+};
+
