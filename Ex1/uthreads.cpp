@@ -5,7 +5,7 @@
 #include <list>
 #include <set>
 #include <signal.h>
-
+#include <memory>
 
 /**************************************************
 *                                                 *
@@ -94,6 +94,13 @@ std::set<int> blockedThreads;
 std::map<int, Thread*> threads;
 ThreadIdManager idManager = ThreadIdManager();
 
+void cleanup_all_threads() {
+    for (auto& pair : threads) {
+        delete pair.second;
+    }
+    threads.clear();
+}
+
 
 
 /**************************************************
@@ -140,7 +147,7 @@ int uthread_spawn(thread_entry_point entry_point) {
         //unblock_signal(SIGVTALRM);
         return -1;
     }
-    if (readyThreads.size() == MAX_THREAD_NUM - 1) { // -1 because the main thread is also a thread
+    if (threads.size() == MAX_THREAD_NUM - 1) { // -1 because the main thread is also a thread
         std::cerr << "ERROR: passed max threads number\n";
         //unblock_signal(SIGVTALRM);
         return -1;
@@ -155,8 +162,9 @@ int uthread_spawn(thread_entry_point entry_point) {
     //     return -1;
     // } 
     int tid = idManager.getNewThreadId();
-    Thread* newThread = new Thread(entry_point, tid);
-    threads.insert({newThread->id, newThread});
+    std::unique_ptr<Thread> threadPtr = std::make_unique<Thread>();
+    //Thread* newThread = new Thread(entry_point, tid);
+    threads.insert({threadPtr->id, threadPtr.get()});
     readyThreads.push_back(tid);
     std::cout << "spawned thread with id: " << tid << '\n';
     return tid;
@@ -186,6 +194,7 @@ int uthread_terminate(int tid){
         std::cerr << "ERROR: thread with id " << tid << " does not exist\n";
         return -1;
     }
+    delete threads[tid];
     threads.erase(tid);
     readyThreads.remove(tid);
     blockedThreads.erase(tid);
