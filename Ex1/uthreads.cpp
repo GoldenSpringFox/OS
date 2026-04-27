@@ -122,7 +122,6 @@ void cleanup_all_threads() {
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_init(int quantum_usecs) {
-    std::cout << "> INITIALIZE" << '\n';
     runningThread = 0;
     return 0;
 }
@@ -140,14 +139,13 @@ int uthread_init(int quantum_usecs) {
  * @return On success, return the ID of the created thread. On failure, return -1.
 */
 int uthread_spawn(thread_entry_point entry_point) {
-    std::cout << "> SPAWN\n";
     // block_signal(SIGVTALRM); 
     if (entry_point == nullptr) {
         std::cerr << "ERROR: entry point is null\n";
         //unblock_signal(SIGVTALRM);
         return -1;
     }
-    if (threads.size() == MAX_THREAD_NUM - 1) { // -1 because the main thread is also a thread
+    if (threads.size() >= MAX_THREAD_NUM - 1) {
         std::cerr << "ERROR: passed max threads number\n";
         //unblock_signal(SIGVTALRM);
         return -1;
@@ -166,7 +164,6 @@ int uthread_spawn(thread_entry_point entry_point) {
     //Thread* newThread = new Thread(entry_point, tid);
     threads.insert({threadPtr->id, threadPtr.get()});
     readyThreads.push_back(tid);
-    std::cout << "spawned thread with id: " << tid << '\n';
     return tid;
 }
 
@@ -182,7 +179,6 @@ int uthread_spawn(thread_entry_point entry_point) {
  * itself or the main thread is terminated, the function does not return.
 */
 int uthread_terminate(int tid){
-    std::cout << "> TERMINATE" << '\n';
     if (tid == 0) {
         for (std::map<int, Thread*>::iterator it = threads.begin(); it != threads.end(); ++it) {
             delete it->second;
@@ -190,6 +186,7 @@ int uthread_terminate(int tid){
         threads.clear();
         exit(0);
     }
+
     if (threads.find(tid) == threads.end()) {
         std::cerr << "ERROR: thread with id " << tid << " does not exist\n";
         return -1;
@@ -199,7 +196,6 @@ int uthread_terminate(int tid){
     readyThreads.remove(tid);
     blockedThreads.erase(tid);
     idManager.removeThreadId(tid);
-    std::cout << "deleted thread with id: " << tid << '\n';
     return 0;
 }
 
