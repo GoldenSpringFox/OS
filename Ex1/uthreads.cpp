@@ -91,15 +91,8 @@ class Thread {
 int runningThread;
 std::list<int> readyThreads;
 std::set<int> blockedThreads;
-std::map<int, Thread*> threads;
+std::map<int, std::unique_ptr<Thread>> threads;
 ThreadIdManager idManager = ThreadIdManager();
-
-void cleanup_all_threads() {
-    for (auto& pair : threads) {
-        delete pair.second;
-    }
-    threads.clear();
-}
 
 
 
@@ -150,19 +143,10 @@ int uthread_spawn(thread_entry_point entry_point) {
         //unblock_signal(SIGVTALRM);
         return -1;
     }
-    // try {
-    //     Thread newThread = Thread().create(entry_point);
-    //     readyThreads.push(newThread.id);
-    //     newThread.isBlocked = false;
-    // } catch (std::bad_alloc& e) {
-    //     std::cerr << "ERROR: failed to allocate memory for thread stack\n";
-    //     unblock_signal(SIGVTALRM);
-    //     return -1;
-    // } 
+
     int tid = idManager.getNewThreadId();
-    std::unique_ptr<Thread> threadPtr = std::make_unique<Thread>();
-    //Thread* newThread = new Thread(entry_point, tid);
-    threads.insert({threadPtr->id, threadPtr.get()});
+    std::unique_ptr<Thread> threadPtr = std::make_unique<Thread>(entry_point, tid);
+    threads.insert({threadPtr->id, std::move(threadPtr)});
     readyThreads.push_back(tid);
     return tid;
 }
@@ -180,9 +164,6 @@ int uthread_spawn(thread_entry_point entry_point) {
 */
 int uthread_terminate(int tid){
     if (tid == 0) {
-        for (std::map<int, Thread*>::iterator it = threads.begin(); it != threads.end(); ++it) {
-            delete it->second;
-        }
         threads.clear();
         exit(0);
     }
@@ -191,7 +172,7 @@ int uthread_terminate(int tid){
         std::cerr << "ERROR: thread with id " << tid << " does not exist\n";
         return -1;
     }
-    delete threads[tid];
+
     threads.erase(tid);
     readyThreads.remove(tid);
     blockedThreads.erase(tid);
@@ -304,18 +285,3 @@ void unblock_signal(int sig) {
     sigaddset(&set, sig); 
     sigprocmask(SIG_UNBLOCK, &set, nullptr); 
 }
-
-// Thread createThread(thread_entry_point entry_point) {
-//     Thread newThread;
-//     newThread.id = id;
-//     newThread.entry_point = entry_point;
-//     newThread.stack = new char[STACK_SIZE];
-//     //newThread.quantums = 0;
-//     newThread.isBlocked = false;
-//     return newThread;
-// }
-
-
-
-
-
