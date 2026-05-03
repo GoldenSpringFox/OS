@@ -87,7 +87,7 @@ class ThreadIdManager {
                 return currentMaxId;
             }
             
-            std::cerr << "ERROR: passed max threads number\n";
+            std::cerr << "thread library error: passed max threads number\n";
             return -1;
     
         }
@@ -141,7 +141,7 @@ class Thread {
             this->stack = new char[STACK_SIZE];
             this->id = id;
             if (this->id == -1) {
-                throw std::runtime_error("error: passed max threads number");
+                throw std::runtime_error("thread library error: passed max threads number");
             }
 
             setup_thread(this->id, this->stack, this->entry_point);
@@ -296,7 +296,7 @@ void resetQuantumTimer() {
     int result = setitimer(ITIMER_VIRTUAL, &timer, NULL);
     if (result)
     {
-        printf("ERROR: setitimer failed");
+        printf("system error: setitimer failed");
     }
 }
 
@@ -338,7 +338,7 @@ void initializeQuantumTimer(int quantum_usecs) {
 */
 int uthread_init(int quantum_usecs) {
     if (quantum_usecs <= 0) {
-        std::cerr << "ERROR: quantum_usecs must be positive\n";
+        std::cerr << "thread library error: quantum_usecs must be positive\n";
         return -1;
     }
 
@@ -513,7 +513,7 @@ int uthread_resume(int tid) {
 int uthread_sleep(int num_quantums) {
     block_signal(SIGVTALRM);
     if (num_quantums < 0) {
-        std::cerr << "ERROR: num_quantums must be non-negative\n";
+        std::cerr << "thread library error: num_quantums must be non-negative\n";
         unblock_signal(SIGVTALRM);
         return -1;
     }
@@ -526,7 +526,7 @@ int uthread_sleep(int num_quantums) {
     }
 
     if (runningThread == 0) {
-        std::cerr << "ERROR: main thread cannot sleep\n";
+        std::cerr << "thread library error: main thread cannot sleep\n";
         unblock_signal(SIGVTALRM);
         return -1;
     }
@@ -573,7 +573,7 @@ int uthread_get_total_quantums() {
 int uthread_get_quantums(int tid) {
     block_signal(SIGVTALRM);
     if (threads.find(tid) == threads.end()) {
-        std::cerr << "ERROR: thread with ID " << tid << " does not exist\n";
+        std::cerr << "thread library error: thread with ID " << tid << " does not exist\n";
         unblock_signal(SIGVTALRM);
         return -1;
     }
