@@ -114,26 +114,30 @@ class Thread {
         sigjmp_buf env;
         thread_entry_point entry_point;
         char* stack;
+        int quantums;
 
     public:
         // Special constructor for the main thread, which doesn't have an entry point or a stack, and is already running when the library is initialized.
         Thread() {
             this->id = 0;
+            this->quantums = 1;
             this->entry_point = nullptr;
             this->stack = nullptr;
             sigsetjmp(env, 1);
-            sigemptyset(&env->__saved_mask);
+            sigemptyset(&env->__saved_mask); 
         }
 
         Thread(thread_entry_point entry_point, int id) {
             this->entry_point = entry_point;
             this->stack = new char[STACK_SIZE];
             this->id = id;
+            this->quantums = 0;
             if (this->id == -1) {
                 throw std::runtime_error("error: passed max threads number");
             }
 
             setup_thread(this->id, this->stack, this->entry_point);
+            
         }
         
         ~Thread() {
@@ -166,6 +170,13 @@ class Thread {
         thread_entry_point getEntryPoint() const {
             return entry_point;
         }
+
+        int getQuantums() const {
+            return quantums;
+        }
+        void incrementQuantums() {
+            quantums++;
+        }
 };
 
 
@@ -180,6 +191,7 @@ std::list<int> readyThreads;
 std::set<int> blockedThreads;
 std::map<int, std::unique_ptr<Thread>> threads;
 ThreadIdManager idManager = ThreadIdManager();
+int totalQuantums = 0;
 
 
 /**************************************************
@@ -187,6 +199,27 @@ ThreadIdManager idManager = ThreadIdManager();
 *                   Methods                       *
 *                                                 *
 ***************************************************/
+
+int context_switch () {
+    int ret_val = sigsetjmp(threads[runningThread]->getContext(), 1);
+    if (ret_val != 0) {
+        return 0;
+    }
+
+    bool found_next_thread = false;
+    while (!found_next_thread) {
+        int tid = readyThreads.front();
+        readyThreads.pop_front();
+        if (threads.find(tid) != threads.end()) {
+            runningThread = tid;
+            found_next_thread = true;
+        }
+    }
+    totalQuantums++;
+    threads[runningThread]->incrementQuantums();
+    siglongjmp(threads[runningThread]->getContext(), 1);
+    return 0;
+}
 
 /**
  * @brief initializes the thread library.
@@ -208,6 +241,7 @@ int uthread_init(int quantum_usecs) {
 
     threads[0] = std::make_unique<Thread>();
     runningThread = 0;
+    totalQuantums = 1;
 
     return 0;
 }
@@ -231,7 +265,7 @@ int uthread_spawn(thread_entry_point entry_point) {
         //unblock_signal(SIGVTALRM);
         return -1;
     }
-    if (threads.size() >= MAX_THREAD_NUM - 1) {
+    if (threads.size() >= MAX_THREAD_NUM) {
         std::cerr << "thread library error: passed max threads number\n";
         //unblock_signal(SIGVTALRM);
         return -1;
@@ -239,7 +273,7 @@ int uthread_spawn(thread_entry_point entry_point) {
 
     int tid = idManager.getNewThreadId();
     std::unique_ptr<Thread> threadPtr;
-    
+
     try {
         threadPtr = std::make_unique<Thread>(entry_point, tid);
     }
@@ -354,29 +388,6 @@ int uthread_sleep(int num_quantums) {
     context_switch();
 }
 
-
-int context_switch () {
-    int ret_val = sigsetjmp(threads[runningThread]->getContext(), 1);
-    if (ret_val != 0) {
-        return 0;
-    }
-
-    bool found_next_thread = false;
-    while (!found_next_thread) {
-        int tid = readyThreads.front();
-        readyThreads.pop_front();
-        if (threads.find(tid) != threads.end()) {
-            runningThread = tid;
-            found_next_thread = true;
-        }
-    }
-
-    siglongjmp(threads[runningThread]->getContext(), 1);
-
-    return 0;
-}
-
-
 /**
  * @brief Returns the thread ID of the calling thread.
  *
@@ -396,8 +407,7 @@ int uthread_get_tid() {
  * @return The total number of quantums.
 */
 int uthread_get_total_quantums() {
-    std::cerr << "thread library error: " << "did not implement" << std::endl;
-    return -1;
+    return totalQuantums;
 }
 
 
@@ -411,8 +421,11 @@ int uthread_get_total_quantums() {
  * @return On success, return the number of quantums of the thread with ID tid. On failure, return -1.
 */
 int uthread_get_quantums(int tid) {
-    std::cerr << "thread library error: " << "did not implement" << std::endl;
-    return -1;
+    if (threads.find(tid) == threads.end()) {
+        std::cerr << "ERROR: thread with ID " << tid << " does not exist\n";
+        return -1;
+    }
+    return threads[tid]->getQuantums();
 }
 
 // Helper function to block a specific signal (used for critical sections)
