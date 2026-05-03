@@ -227,26 +227,28 @@ struct itimerval timer;
 *                                                 *
 ***************************************************/
 
-// // Helper function to block a specific signal (used for critical sections)
-// void block_signal(int sig) {
-//     sigset_t set; 
-//     sigemptyset(&set); 
-//     sigaddset(&set, sig); 
-//     sigprocmask(SIG_BLOCK, &set, nullptr); 
-// }
+// Helper function to block a specific signal (used for critical sections)
+void block_signal(int sig) {
+    sigset_t set; 
+    sigemptyset(&set); 
+    sigaddset(&set, sig); 
+    sigprocmask(SIG_BLOCK, &set, nullptr); 
+}
 
-// // Helper function to unblock a specific signal (used for critical sections)
-// void unblock_signal(int sig) {
-//     sigset_t set; 
-//     sigemptyset(&set); 
-//     sigaddset(&set, sig); 
-//     sigprocmask(SIG_UNBLOCK, &set, nullptr); 
-// }
+// Helper function to unblock a specific signal (used for critical sections)
+void unblock_signal(int sig) {
+    sigset_t set; 
+    sigemptyset(&set); 
+    sigaddset(&set, sig); 
+    sigprocmask(SIG_UNBLOCK, &set, nullptr); 
+}
 
 int context_switch () {
+    block_signal(SIGVTALRM);
     if (threads.find(runningThread) != threads.end()) {
         int ret_val = sigsetjmp(threads[runningThread]->getContext(), 1);
         if (ret_val != 0) {
+            unblock_signal(SIGVTALRM);
             return 0;
         }
     }
@@ -257,6 +259,7 @@ int context_switch () {
 
     if (threads.find(tid) == threads.end()) {
         std::cerr << "thread libary error: ready thread with id " << tid << " does not exist\n";
+        unblock_signal(SIGVTALRM);
         return -1;
     }
 
@@ -264,10 +267,12 @@ int context_switch () {
     threads[runningThread]->incrementQuantums();
 
     siglongjmp(threads[runningThread]->getContext(), 1);
+    unblock_signal(SIGVTALRM);
     return 0;
 }
 
 void timer_handler_quantum(int sig) {
+    block_signal(SIGVTALRM);
     totalQuantums++;
     threads[runningThread]->incrementQuantums();
 
@@ -284,6 +289,7 @@ void timer_handler_quantum(int sig) {
             ++it; 
         }
     }
+    unblock_signal(SIGVTALRM);
 }
 
 void resetQuantumTimer() {
@@ -358,16 +364,15 @@ int uthread_init(int quantum_usecs) {
  *
  * @return On success, return the ID of the created thread. On failure, return -1.
 */
-int uthread_spawn(thread_entry_point entry_point) {
-    // block_signal(SIGVTALRM); 
+int uthread_spawn(thread_entry_point entry_point) { 
     if (entry_point == nullptr) {
         std::cerr << "thread library error: entry point is null\n";
-        //unblock_signal(SIGVTALRM);
         return -1;
     }
+    block_signal(SIGVTALRM);
     if (threads.size() >= MAX_THREAD_NUM) {
         std::cerr << "thread library error: passed max threads number\n";
-        //unblock_signal(SIGVTALRM);
+        unblock_signal(SIGVTALRM);
         return -1;
     }
 
@@ -383,6 +388,7 @@ int uthread_spawn(thread_entry_point entry_point) {
     }
     threads.insert({threadPtr->getId(), std::move(threadPtr)});
     readyThreads.push_back(tid);
+    unblock_signal(SIGVTALRM);
     return tid;
 }
 
@@ -398,6 +404,7 @@ int uthread_spawn(thread_entry_point entry_point) {
  * itself or the main thread is terminated, the function does not return.
 */
 int uthread_terminate(int tid){
+    block_signal(SIGVTALRM);
     if (tid == 0) {
         threads.clear();
         exit(0);
@@ -405,6 +412,7 @@ int uthread_terminate(int tid){
 
     if (threads.find(tid) == threads.end()) {
         std::cerr << "thread library error: thread with id " << tid << " does not exist\n";
+        unblock_signal(SIGVTALRM);
         return -1;
     }
 
@@ -416,7 +424,7 @@ int uthread_terminate(int tid){
     if (tid == runningThread) {
         context_switch();
     }
-    
+    unblock_signal(SIGVTALRM);
     return 0;
 }
 
@@ -431,24 +439,30 @@ int uthread_terminate(int tid){
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_block(int tid) {
+    block_signal(SIGVTALRM);
     if (threads.find(tid) == threads.end()) {
         std::cerr << "thread library error: thread with id " << tid << " does not exist\n";
+        unblock_signal(SIGVTALRM);
         return -1;
     }
     if (tid == 0) {
         std::cerr << "thread library error: cannot block main thread\n";
+        unblock_signal(SIGVTALRM);  
         return -1;
     }
     if (runningThread == tid) {
         blockedThreads.insert(tid);
         context_switch();
+        unblock_signal(SIGVTALRM);
         return 0;
     }
     if (blockedThreads.find(tid) != blockedThreads.end()) {
+        unblock_signal(SIGVTALRM);  
         return 0;
     }
     threads[tid]->setBlocked(true);
     blockedThreads.insert(tid);
+    unblock_signal(SIGVTALRM);
     return 0;
 }
 
@@ -463,16 +477,20 @@ int uthread_block(int tid) {
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_resume(int tid) {
+    block_signal(SIGVTALRM);
     if (runningThread == tid || readyThreads.front() == tid) {
+        unblock_signal(SIGVTALRM);
         return 0;
     }
     if (threads.find(tid) == threads.end()) {
         std::cerr << "thread library error: thread with id " << tid << " does not exist\n";
+        unblock_signal(SIGVTALRM);
         return -1;
     }
     threads[tid]->setBlocked(false);
     blockedThreads.erase(tid);
     readyThreads.push_back(tid);
+    unblock_signal(SIGVTALRM);
     return 0;
 }
 
@@ -493,25 +511,30 @@ int uthread_resume(int tid) {
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_sleep(int num_quantums) {
+    block_signal(SIGVTALRM);
     if (num_quantums < 0) {
         std::cerr << "ERROR: num_quantums must be non-negative\n";
+        unblock_signal(SIGVTALRM);
         return -1;
     }
 
     if (num_quantums == 0) {
         readyThreads.push_back(runningThread);
         context_switch();
+        unblock_signal(SIGVTALRM);                  
         return 0;
     }
 
     if (runningThread == 0) {
         std::cerr << "ERROR: main thread cannot sleep\n";
+        unblock_signal(SIGVTALRM);
         return -1;
     }
 
     threads[runningThread]->setRemainingSleepQuantums(num_quantums);
     blockedThreads.insert(runningThread);
     context_switch();
+    unblock_signal(SIGVTALRM);
     return 0;
 }
 
@@ -548,9 +571,13 @@ int uthread_get_total_quantums() {
  * @return On success, return the number of quantums of the thread with ID tid. On failure, return -1.
 */
 int uthread_get_quantums(int tid) {
+    block_signal(SIGVTALRM);
     if (threads.find(tid) == threads.end()) {
         std::cerr << "ERROR: thread with ID " << tid << " does not exist\n";
+        unblock_signal(SIGVTALRM);
         return -1;
     }
-    return threads[tid]->getQuantums();
+    int quantums = threads[tid]->getQuantums();
+    unblock_signal(SIGVTALRM);
+    return quantums;
 }
