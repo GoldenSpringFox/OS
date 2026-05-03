@@ -195,6 +195,9 @@ class Thread {
         int getRemainingSleepQuantums() const {
             return remainingSleepQuantums;
         }
+        void setRemainingSleepQuantums(int num_quantums) {
+            remainingSleepQuantums = num_quantums;
+        }
         void decrementRemainingSleepQuantums() {
             if (remainingSleepQuantums > 0) {
                 remainingSleepQuantums--;
@@ -250,13 +253,16 @@ int context_switch () {
     
     int tid = readyThreads.front();
     readyThreads.pop_front();
+
+    // std::cout << "ContextSwitch: thread " << runningThread << " -> " << tid << " (Quantums: " << totalQuantums << ")" << std::endl;
+
     runningThread = tid;
 
     if (threads.find(tid) == threads.end()) {
         std::cerr << "thread libary error: ready thread with id " << tid << " does not exist\n";
         return -1;
     }
-    
+
     totalQuantums++;
     threads[runningThread]->incrementQuantums();
 
@@ -264,24 +270,34 @@ int context_switch () {
     return 0;
 }
 
-void timer_handler(int sig) {
+void timer_handler_quantum(int sig) {
     totalQuantums++;
     threads[runningThread]->incrementQuantums();
     
     for (int tid : blockedThreads) {
         threads[tid]->decrementRemainingSleepQuantums();
-        if (threads[tid]->getRemainingSleepQuantums() == 0 && threads[tid]->getIsBlocked()) {
+        if (threads[tid]->getRemainingSleepQuantums() == 0 && !threads[tid]->getIsBlocked()) {
             readyThreads.push_back(tid);
-            threads[tid]->setBlocked(false);
             blockedThreads.erase(tid);
+            std::cout << readyThreads.front() << " -> " << readyThreads.back() << std::endl;
         }
+    }
+
+    // std::cout << "Timer: total quantums = " << totalQuantums << ", running thread = " << runningThread << std::endl;
+}
+
+void resetQuantumTimer() {
+    int result = setitimer(ITIMER_VIRTUAL, &timer, NULL);
+    if (result)
+    {
+        printf("ERROR: setitimer failed");
     }
 }
 
 void initializeQuantumTimer(int quantum_usecs) {
     struct sigaction sa = {0};
 
-    sa.sa_handler = &timer_handler;
+    sa.sa_handler = &timer_handler_quantum;
     if (sigaction(SIGVTALRM, &sa, NULL) < 0)
     {
         printf("sigaction error.");
@@ -289,17 +305,10 @@ void initializeQuantumTimer(int quantum_usecs) {
 
     timer.it_value.tv_sec = quantum_usecs / USEC_IN_SEC;
     timer.it_value.tv_usec = quantum_usecs % USEC_IN_SEC;
-
     timer.it_interval.tv_sec = quantum_usecs / USEC_IN_SEC;
     timer.it_interval.tv_usec = quantum_usecs % USEC_IN_SEC;
-}
 
-void setQuantumTimer(int quantum_usecs) {
-    int result = setitimer(ITIMER_VIRTUAL, &timer, NULL);
-    if (result < 0)
-    {
-        printf("ERROR: setitimer failed");
-    }
+    resetQuantumTimer();
 }
 
 
@@ -332,8 +341,9 @@ int uthread_init(int quantum_usecs) {
 
     totalQuantums = 1;
 
+    std::cout << "Initializing thread library with quantum length of " << quantum_usecs << " microseconds" << std::endl;
+
     initializeQuantumTimer(quantum_usecs);
-    setQuantumTimer(quantum_usecs);
 
     return 0;
 }
@@ -501,6 +511,7 @@ int uthread_sleep(int num_quantums) {
         return -1;
     }
 
+    threads[runningThread]->setRemainingSleepQuantums(num_quantums);
     blockedThreads.insert(runningThread);
     context_switch();
     return 0;
