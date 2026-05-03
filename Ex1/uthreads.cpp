@@ -130,7 +130,7 @@ class Thread {
             this->stack = new char[STACK_SIZE];
             this->id = id;
             if (this->id == -1) {
-                throw std::runtime_error("ERROR: passed max threads number");
+                throw std::runtime_error("error: passed max threads number");
             }
 
             setup_thread(this->id, this->stack, this->entry_point);
@@ -227,18 +227,26 @@ int uthread_init(int quantum_usecs) {
 int uthread_spawn(thread_entry_point entry_point) {
     // block_signal(SIGVTALRM); 
     if (entry_point == nullptr) {
-        std::cerr << "ERROR: entry point is null\n";
+        std::cerr << "thread library error: entry point is null\n";
         //unblock_signal(SIGVTALRM);
         return -1;
     }
     if (threads.size() >= MAX_THREAD_NUM - 1) {
-        std::cerr << "ERROR: passed max threads number\n";
+        std::cerr << "thread library error: passed max threads number\n";
         //unblock_signal(SIGVTALRM);
         return -1;
     }
 
     int tid = idManager.getNewThreadId();
-    std::unique_ptr<Thread> threadPtr = std::make_unique<Thread>(entry_point, tid);
+    std::unique_ptr<Thread> threadPtr;
+    
+    try {
+        threadPtr = std::make_unique<Thread>(entry_point, tid);
+    }
+    catch (const std::runtime_error& e) { 
+        std::cerr << "system error: " << e.what() << std::endl;
+        exit(1);
+    }
     threads.insert({threadPtr->getId(), std::move(threadPtr)});
     readyThreads.push_back(tid);
     return tid;
@@ -262,7 +270,7 @@ int uthread_terminate(int tid){
     }
 
     if (threads.find(tid) == threads.end()) {
-        std::cerr << "ERROR: thread with id " << tid << " does not exist\n";
+        std::cerr << "thread library error: thread with id " << tid << " does not exist\n";
         return -1;
     }
 
