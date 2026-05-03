@@ -208,15 +208,14 @@ int context_switch () {
             return 0;
         }
     }
+    
+    int tid = readyThreads.front();
+    readyThreads.pop_front();
+    runningThread = tid;
 
-    bool found_next_thread = false;
-    while (!found_next_thread) {
-        int tid = readyThreads.front();
-        readyThreads.pop_front();
-        if (threads.find(tid) != threads.end()) {
-            runningThread = tid;
-            found_next_thread = true;
-        }
+    if (threads.find(tid) == threads.end()) {
+        std::cerr << "thread libary error: ready thread with id " << tid << " does not exist\n";
+        return -1;
     }
     
     totalQuantums++;
