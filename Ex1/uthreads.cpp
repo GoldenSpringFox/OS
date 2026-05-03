@@ -375,6 +375,7 @@ int uthread_sleep(int num_quantums) {
     if (num_quantums == 0) {
         readyThreads.push_back(runningThread);
         context_switch();
+        return 0;
     }
 
     if (runningThread == 0) {
