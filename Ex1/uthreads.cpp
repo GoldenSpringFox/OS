@@ -106,6 +106,7 @@ class ThreadIdManager {
             terminatedThreads.insert(id);
             return 0;
         }
+
 };
 
 class Thread {        
@@ -115,6 +116,8 @@ class Thread {
         thread_entry_point entry_point;
         char* stack;
         int quantums;
+        bool isBlocked;
+        bool isSleeping;
 
     public:
         // Special constructor for the main thread, which doesn't have an entry point or a stack, and is already running when the library is initialized.
@@ -126,6 +129,8 @@ class Thread {
             sigemptyset(&env->__saved_mask); 
 
             this->quantums = 1;
+            this->isBlocked = false;
+            this->isSleeping = false;
         }
 
         Thread(thread_entry_point entry_point, int id) {
@@ -177,6 +182,15 @@ class Thread {
         }
         void incrementQuantums() {
             quantums++;
+        }
+        bool isBlocked() const {
+            return isBlocked;
+        }
+        void setBlocked(bool blocked) {
+            isBlocked = blocked;
+        }
+        void setSleep(bool sleep) {
+            isSleeping = sleep;
         }
 };
 
@@ -336,8 +350,25 @@ int uthread_terminate(int tid){
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_block(int tid) {
-    std::cerr << "thread library error: " << "did not implement" << std::endl;
-    return -1;
+    if (threads.find(tid) == threads.end()) {
+        std::cerr << "thread library error: thread with id " << tid << " does not exist\n";
+        return -1;
+    }
+    if (tid == 0) {
+        std::cerr << "thread library error: cannot block main thread\n";
+        return -1;
+    }
+    if (runningThread == tid) {
+        blockedThreads.insert(tid);
+        context_switch();
+        return 0;
+    }
+    if (blockedThreads.find(tid) != blockedThreads.end()) {
+        return 0;
+    }
+    threads[tid]->setBlocked(true);
+    blockedThreads.insert(tid);
+    return 0;
 }
 
 
@@ -351,8 +382,17 @@ int uthread_block(int tid) {
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_resume(int tid) {
-    std::cerr << "thread library error: " << "did not implement" << std::endl;
-    return -1;
+    if (runningThread == tid || readyThreads.front() == tid) {
+        return 0;
+    }
+    if (threads.find(tid) == threads.end()) {
+        std::cerr << "thread library error: thread with id " << tid << " does not exist\n";
+        return -1;
+    }
+    threads[tid]->setBlocked(false);
+    blockedThreads.erase(tid);
+    readyThreads.push_back(tid);
+    return 0;
 }
 
 
@@ -387,8 +427,6 @@ int uthread_sleep(int num_quantums) {
         std::cerr << "ERROR: main thread cannot sleep\n";
         return -1;
     }
-    
-    return -1;
     
     blockedThreads.insert(runningThread);
     context_switch();
