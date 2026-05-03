@@ -6,6 +6,58 @@
 #include <set>
 #include <signal.h>
 #include <memory>
+#include <setjmp.h>
+
+/**************************************************
+*                                                 *
+*                  Thread Setup                   *
+*                                                 *
+***************************************************/
+
+#ifdef __x86_64__
+/* code for 64 bit Intel arch */
+
+typedef unsigned long address_t;
+#define JB_SP 6
+#define JB_PC 7
+
+/* A translation is required when using an address of a variable.
+   Use this as a black box in your code. */
+address_t translate_address(address_t addr)
+{
+    address_t ret;
+    asm volatile("xor    %%fs:0x30,%0\n"
+        "rol    $0x11,%0\n"
+                 : "=g" (ret)
+                 : "0" (addr));
+    return ret;
+}
+
+#else
+/* code for 32 bit Intel arch */
+
+typedef unsigned int address_t;
+#define JB_SP 4
+#define JB_PC 5
+
+
+/* A translation is required when using an address of a variable.
+   Use this as a black box in your code. */
+address_t translate_address(address_t addr)
+{
+    address_t ret;
+    asm volatile("xor    %%gs:0x18,%0\n"
+                 "rol    $0x9,%0\n"
+    : "=g" (ret)
+    : "0" (addr));
+    return ret;
+}
+
+
+#endif
+
+typedef void (*thread_entry_point)(void);
+
 
 /**************************************************
 *                                                 *
@@ -62,8 +114,18 @@ class Thread {
     private:     
         thread_entry_point entry_point;
         char* stack;
+        sigjmp_buf env;
 
-    public: 
+    public:
+        // Special constructor for the main thread, which doesn't have an entry point or a stack, and is already running when the library is initialized.
+        Thread() {
+            this->id = 0;
+            this->entry_point = nullptr;
+            this->stack = nullptr;
+            sigsetjmp(env, 1);
+            sigemptyset(&env->__saved_mask);
+        }
+
         Thread(thread_entry_point entry_point, int id) {
             this->entry_point = entry_point;
             this->stack = new char[STACK_SIZE];
@@ -71,6 +133,8 @@ class Thread {
             if (this->id == -1) {
                 throw std::runtime_error("ERROR: passed max threads number");
             }
+
+            setup_thread(this->id, this->stack, this->entry_point);
         }
         
         ~Thread() {
@@ -78,7 +142,19 @@ class Thread {
                 delete[] this->stack;
                 this->stack = nullptr;
             }
-        }   
+        }
+
+        void setup_thread(int tid, char *stack, thread_entry_point entry_point)
+        {
+            // initializes env[tid] to use the right stack, and to run from the function 'entry_point', when we'll use
+            // siglongjmp to jump into the thread.
+            address_t sp = (address_t) stack + STACK_SIZE - sizeof(address_t);
+            address_t pc = (address_t) entry_point;
+            sigsetjmp(env, 1);
+            (env->__jmpbuf)[JB_SP] = translate_address(sp);
+            (env->__jmpbuf)[JB_PC] = translate_address(pc);
+            sigemptyset(&env->__saved_mask);
+        }
 };
 
 
@@ -93,7 +169,6 @@ std::list<int> readyThreads;
 std::set<int> blockedThreads;
 std::map<int, std::unique_ptr<Thread>> threads;
 ThreadIdManager idManager = ThreadIdManager();
-
 
 
 /**************************************************
@@ -115,7 +190,14 @@ ThreadIdManager idManager = ThreadIdManager();
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_init(int quantum_usecs) {
+    if (quantum_usecs <= 0) {
+        std::cerr << "ERROR: quantum_usecs must be positive\n";
+        return -1;
+    }
+
+    threads[0] = std::make_unique<Thread>();
     runningThread = 0;
+
     return 0;
 }
 
