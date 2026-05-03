@@ -226,6 +226,7 @@ struct itimerval timer;
 *                Private Methods                  *
 *                                                 *
 ***************************************************/
+void resetQuantumTimer();
 
 // Helper function to block a specific signal (used for critical sections)
 void block_signal(int sig) {
@@ -241,6 +242,30 @@ void unblock_signal(int sig) {
     sigemptyset(&set); 
     sigaddset(&set, sig); 
     sigprocmask(SIG_UNBLOCK, &set, nullptr); 
+}
+
+int increment_quantum() {
+    block_signal(SIGVTALRM);
+    totalQuantums++;
+    threads[runningThread]->incrementQuantums();
+
+    for (auto it = blockedThreads.begin(); it != blockedThreads.end(); ) {
+        int tid = *it;
+        threads[tid]->decrementRemainingSleepQuantums();
+
+        if (threads[tid]->getRemainingSleepQuantums() == 0 && !threads[tid]->getIsBlocked()) {
+            readyThreads.push_back(tid);
+            // erase returns the iterator to the next element
+            it = blockedThreads.erase(it); 
+        } else {
+            // Only increment if we didn't erase
+            ++it; 
+        }
+    }
+    resetQuantumTimer();
+
+    unblock_signal(SIGVTALRM);
+    return 0;
 }
 
 int context_switch () {
@@ -263,33 +288,17 @@ int context_switch () {
         return -1;
     }
 
-    totalQuantums++;
-    threads[runningThread]->incrementQuantums();
-
+    increment_quantum();
     siglongjmp(threads[runningThread]->getContext(), 1);
+    
+    std::cerr << "thread libary error: reached unreachable code" << std::endl;
     unblock_signal(SIGVTALRM);
     return 0;
 }
 
 void timer_handler_quantum(int sig) {
-    block_signal(SIGVTALRM);
-    totalQuantums++;
-    threads[runningThread]->incrementQuantums();
-
-    for (auto it = blockedThreads.begin(); it != blockedThreads.end(); ) {
-        int tid = *it;
-        threads[tid]->decrementRemainingSleepQuantums();
-
-        if (threads[tid]->getRemainingSleepQuantums() == 0 && !threads[tid]->getIsBlocked()) {
-            readyThreads.push_back(tid);
-            // erase returns the iterator to the next element
-            it = blockedThreads.erase(it); 
-        } else {
-            // Only increment if we didn't erase
-            ++it; 
-        }
-    }
-    unblock_signal(SIGVTALRM);
+    readyThreads.push_back(runningThread);
+    context_switch();
 }
 
 void resetQuantumTimer() {

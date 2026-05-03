@@ -158,9 +158,6 @@ int main(int argc, char **argv) {
     // Yield once to let thread start and begin sleeping
     uthread_sleep(0);
 
-    // Yield one more time to let some quantums pass
-    uthread_sleep(0);
-
     // Now block the sleeping thread
     result = uthread_block(tid5);
     if (result != 0) {
