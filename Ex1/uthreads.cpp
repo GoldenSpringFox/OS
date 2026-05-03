@@ -108,13 +108,12 @@ class ThreadIdManager {
         }
 };
 
-class Thread {
-    public: 
-        int id;
+class Thread {        
     private:     
+        int id;
+        sigjmp_buf env;
         thread_entry_point entry_point;
         char* stack;
-        sigjmp_buf env;
 
     public:
         // Special constructor for the main thread, which doesn't have an entry point or a stack, and is already running when the library is initialized.
@@ -154,6 +153,18 @@ class Thread {
             (env->__jmpbuf)[JB_SP] = translate_address(sp);
             (env->__jmpbuf)[JB_PC] = translate_address(pc);
             sigemptyset(&env->__saved_mask);
+        }
+
+        int getId() const {
+            return id;
+        }
+
+        sigjmp_buf& getContext() {
+            return env;
+        }
+
+        thread_entry_point getEntryPoint() const {
+            return entry_point;
         }
 };
 
@@ -228,7 +239,7 @@ int uthread_spawn(thread_entry_point entry_point) {
 
     int tid = idManager.getNewThreadId();
     std::unique_ptr<Thread> threadPtr = std::make_unique<Thread>(entry_point, tid);
-    threads.insert({threadPtr->id, std::move(threadPtr)});
+    threads.insert({threadPtr->getId(), std::move(threadPtr)});
     readyThreads.push_back(tid);
     return tid;
 }
@@ -259,6 +270,11 @@ int uthread_terminate(int tid){
     readyThreads.remove(tid);
     blockedThreads.erase(tid);
     idManager.removeThreadId(tid);
+
+    if (tid == runningThread) {
+        context_switch();
+    }
+    
     return 0;
 }
 
@@ -309,8 +325,47 @@ int uthread_resume(int tid) {
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_sleep(int num_quantums) {
-    std::cerr << "thread library error: " << "did not implement" << std::endl;
+    if (num_quantums < 0) {
+        std::cerr << "ERROR: num_quantums must be non-negative\n";
+        return -1;
+    }
+
+    if (num_quantums == 0) {
+        readyThreads.push_back(runningThread);
+        context_switch();
+    }
+
+    if (runningThread == 0) {
+        std::cerr << "ERROR: main thread cannot sleep\n";
+        return -1;
+    }
+    
     return -1;
+    
+    blockedThreads.insert(runningThread);
+    context_switch();
+}
+
+
+int context_switch () {
+    int ret_val = sigsetjmp(threads[runningThread]->getContext(), 1);
+    if (ret_val != 0) {
+        return 0;
+    }
+
+    bool found_next_thread = false;
+    while (!found_next_thread) {
+        int tid = readyThreads.front();
+        readyThreads.pop_front();
+        if (threads.find(tid) != threads.end()) {
+            runningThread = tid;
+            found_next_thread = true;
+        }
+    }
+
+    siglongjmp(threads[runningThread]->getContext(), 1);
+
+    return 0;
 }
 
 
