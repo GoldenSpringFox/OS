@@ -7,6 +7,9 @@
 #include <signal.h>
 #include <memory>
 #include <setjmp.h>
+#include <sys/time.h>
+
+#define USEC_IN_SEC 1000000
 
 /**************************************************
 *                                                 *
@@ -117,7 +120,7 @@ class Thread {
         char* stack;
         int quantums;
         bool isBlocked;
-        bool isSleeping;
+        int remainingSleepQuantums;
 
     public:
         // Special constructor for the main thread, which doesn't have an entry point or a stack, and is already running when the library is initialized.
@@ -130,7 +133,7 @@ class Thread {
 
             this->quantums = 1;
             this->isBlocked = false;
-            this->isSleeping = false;
+            this->remainingSleepQuantums = 0;
         }
 
         Thread(thread_entry_point entry_point, int id) {
@@ -183,14 +186,19 @@ class Thread {
         void incrementQuantums() {
             quantums++;
         }
-        bool isBlocked() const {
+        bool getIsBlocked() const {
             return isBlocked;
         }
         void setBlocked(bool blocked) {
             isBlocked = blocked;
         }
-        void setSleep(bool sleep) {
-            isSleeping = sleep;
+        int getRemainingSleepQuantums() const {
+            return remainingSleepQuantums;
+        }
+        void decrementRemainingSleepQuantums() {
+            if (remainingSleepQuantums > 0) {
+                remainingSleepQuantums--;
+            }
         }
 };
 
@@ -207,13 +215,30 @@ std::set<int> blockedThreads;
 std::map<int, std::unique_ptr<Thread>> threads;
 ThreadIdManager idManager = ThreadIdManager();
 int totalQuantums;
+struct itimerval timer;
 
 
 /**************************************************
 *                                                 *
-*                   Methods                       *
+*                Private Methods                  *
 *                                                 *
 ***************************************************/
+
+// // Helper function to block a specific signal (used for critical sections)
+// void block_signal(int sig) {
+//     sigset_t set; 
+//     sigemptyset(&set); 
+//     sigaddset(&set, sig); 
+//     sigprocmask(SIG_BLOCK, &set, nullptr); 
+// }
+
+// // Helper function to unblock a specific signal (used for critical sections)
+// void unblock_signal(int sig) {
+//     sigset_t set; 
+//     sigemptyset(&set); 
+//     sigaddset(&set, sig); 
+//     sigprocmask(SIG_UNBLOCK, &set, nullptr); 
+// }
 
 int context_switch () {
     if (threads.find(runningThread) != threads.end()) {
@@ -239,6 +264,51 @@ int context_switch () {
     return 0;
 }
 
+void timer_handler(int sig) {
+    totalQuantums++;
+    threads[runningThread]->incrementQuantums();
+    
+    for (int tid : blockedThreads) {
+        threads[tid]->decrementRemainingSleepQuantums();
+        if (threads[tid]->getRemainingSleepQuantums() == 0 && threads[tid]->getIsBlocked()) {
+            readyThreads.push_back(tid);
+            threads[tid]->setBlocked(false);
+            blockedThreads.erase(tid);
+        }
+    }
+}
+
+void initializeQuantumTimer(int quantum_usecs) {
+    struct sigaction sa = {0};
+
+    sa.sa_handler = &timer_handler;
+    if (sigaction(SIGVTALRM, &sa, NULL) < 0)
+    {
+        printf("sigaction error.");
+    }
+
+    timer.it_value.tv_sec = quantum_usecs / USEC_IN_SEC;
+    timer.it_value.tv_usec = quantum_usecs % USEC_IN_SEC;
+
+    timer.it_interval.tv_sec = quantum_usecs / USEC_IN_SEC;
+    timer.it_interval.tv_usec = quantum_usecs % USEC_IN_SEC;
+}
+
+void setQuantumTimer(int quantum_usecs) {
+    int result = setitimer(ITIMER_VIRTUAL, &timer, NULL);
+    if (result < 0)
+    {
+        printf("ERROR: setitimer failed");
+    }
+}
+
+
+/**************************************************
+*                                                 *
+*                 Public Methods                  *
+*                                                 *
+***************************************************/
+
 /**
  * @brief initializes the thread library.
  *
@@ -261,6 +331,9 @@ int uthread_init(int quantum_usecs) {
     runningThread = 0;
 
     totalQuantums = 1;
+
+    initializeQuantumTimer(quantum_usecs);
+    setQuantumTimer(quantum_usecs);
 
     return 0;
 }
@@ -427,9 +500,10 @@ int uthread_sleep(int num_quantums) {
         std::cerr << "ERROR: main thread cannot sleep\n";
         return -1;
     }
-    
+
     blockedThreads.insert(runningThread);
     context_switch();
+    return 0;
 }
 
 /**
@@ -470,20 +544,4 @@ int uthread_get_quantums(int tid) {
         return -1;
     }
     return threads[tid]->getQuantums();
-}
-
-// Helper function to block a specific signal (used for critical sections)
-void block_signal(int sig) {
-    sigset_t set; 
-    sigemptyset(&set); 
-    sigaddset(&set, sig); 
-    sigprocmask(SIG_BLOCK, &set, nullptr); 
-}
-
-// Helper function to unblock a specific signal (used for critical sections)
-void unblock_signal(int sig) {
-    sigset_t set; 
-    sigemptyset(&set); 
-    sigaddset(&set, sig); 
-    sigprocmask(SIG_UNBLOCK, &set, nullptr); 
 }
