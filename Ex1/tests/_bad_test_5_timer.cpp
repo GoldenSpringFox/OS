@@ -53,6 +53,30 @@ int main(int argc, char **argv) {
         exit(-1);
     }
 
+
+    std::cout << "\n=== Test 4: Thread sleeps and wakes up ===" << std::endl;
+    int tid1 = uthread_spawn(sleeping_thread);
+    if (tid1 == -1) {
+        std::cout << "ERROR: Failed to spawn thread" << std::endl;
+        exit(-1);
+    }
+
+    // Yield to let thread start and sleep
+    if (uthread_sleep(0) == -1) {
+        std::cout << "Failed to sleep" << std::endl;
+        exit(-1);
+    }
+
+    // Wait for the thread to wake up (should take 2 quantums)
+
+    if (sleep_completed != 1) {
+        std::cout << "ERROR: Expected 1 thread to complete sleep, got " << sleep_completed << std::endl;
+        exit(-1);
+    }
+    std::cout << "Success: Thread slept and woke up" << std::endl;
+
+
+
     std::cout << "=== Test 1: Sleep with num_quantums == 0 (yield) ===" << std::endl;
     int initial_quantums = uthread_get_total_quantums();
     if (uthread_sleep(0) == -1) {
@@ -81,33 +105,6 @@ int main(int argc, char **argv) {
         exit(-1);
     }
     std::cout << "Success: Cannot sleep negative quantums" << std::endl;
-
-    
-    std::cout << "\n=== Test 4: Thread sleeps and wakes up ===" << std::endl;
-    int tid1 = uthread_spawn(sleeping_thread);
-    if (tid1 == -1) {
-        std::cout << "ERROR: Failed to spawn thread" << std::endl;
-        exit(-1);
-    }
-
-    // Yield to let thread start and sleep
-    if (uthread_sleep(0) == -1) {
-        std::cout << "Failed to sleep" << std::endl;
-        exit(-1);
-    }
-
-    while (sleep_completed == 0) {
-        if (uthread_sleep(0) == -1) {
-            std::cout << "Failed to sleep" << std::endl;
-            exit(-1);
-        }
-    }
-
-    if (sleep_completed != 1) {
-        std::cout << "ERROR: Expected 1 thread to complete sleep, got " << sleep_completed << std::endl;
-        exit(-1);
-    }
-    std::cout << "Success: Thread slept and woke up" << std::endl;
 
     std::cout << "\n=== Test 5: Multiple threads sleeping for same time, wake at same time ===" << std::endl;
     int tid2 = uthread_spawn(sleep_2_thread);

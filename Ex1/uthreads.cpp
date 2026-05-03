@@ -253,9 +253,6 @@ int context_switch () {
     
     int tid = readyThreads.front();
     readyThreads.pop_front();
-
-    // std::cout << "ContextSwitch: thread " << runningThread << " -> " << tid << " (Quantums: " << totalQuantums << ")" << std::endl;
-
     runningThread = tid;
 
     if (threads.find(tid) == threads.end()) {
@@ -273,17 +270,20 @@ int context_switch () {
 void timer_handler_quantum(int sig) {
     totalQuantums++;
     threads[runningThread]->incrementQuantums();
-    
-    for (int tid : blockedThreads) {
+
+    for (auto it = blockedThreads.begin(); it != blockedThreads.end(); ) {
+        int tid = *it;
         threads[tid]->decrementRemainingSleepQuantums();
+
         if (threads[tid]->getRemainingSleepQuantums() == 0 && !threads[tid]->getIsBlocked()) {
             readyThreads.push_back(tid);
-            blockedThreads.erase(tid);
-            std::cout << readyThreads.front() << " -> " << readyThreads.back() << std::endl;
+            // erase returns the iterator to the next element
+            it = blockedThreads.erase(it); 
+        } else {
+            // Only increment if we didn't erase
+            ++it; 
         }
     }
-
-    // std::cout << "Timer: total quantums = " << totalQuantums << ", running thread = " << runningThread << std::endl;
 }
 
 void resetQuantumTimer() {
@@ -340,8 +340,6 @@ int uthread_init(int quantum_usecs) {
     runningThread = 0;
 
     totalQuantums = 1;
-
-    std::cout << "Initializing thread library with quantum length of " << quantum_usecs << " microseconds" << std::endl;
 
     initializeQuantumTimer(quantum_usecs);
 
