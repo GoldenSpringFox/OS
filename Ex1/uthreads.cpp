@@ -296,6 +296,19 @@ int context_switch () {
     return 0;
 }
 
+//self termination and context switch 
+int self_terminate(int tid) {
+    block_signal(SIGVTALRM);
+    int nextTid = readyThreads.front();
+    readyThreads.pop_front();
+    runningThread = nextTid;
+    threads.erase(tid);
+    increment_quantum();
+    siglongjmp(threads[runningThread]->getContext(), 1);
+    unblock_signal(SIGVTALRM);
+    return 0;
+}
+
 void timer_handler_quantum(int sig) {
     readyThreads.push_back(runningThread);
     context_switch();
@@ -425,14 +438,21 @@ int uthread_terminate(int tid){
         return -1;
     }
 
+    if (tid == runningThread) {
+        idManager.removeThreadId(tid);
+        return self_terminate(tid);
+    }
+
     threads.erase(tid);
     readyThreads.remove(tid);
     blockedThreads.erase(tid);
     idManager.removeThreadId(tid);
-
-    if (tid == runningThread) {
-        context_switch();
-    }
+    
+    /* removed this part because in case of self termination, the thread is already removed from the threads list,
+    which the context switch will use (and reach a null pointer)*/
+    // if (tid == runningThread) {
+    //     context_switch();
+    // }
     unblock_signal(SIGVTALRM);
     return 0;
 }
