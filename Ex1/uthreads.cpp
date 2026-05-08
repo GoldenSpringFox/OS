@@ -76,20 +76,18 @@ class ThreadIdManager {
     public:
         int getNewThreadId(){
             if (!terminatedThreads.empty()) {
-                auto smallestIdPointer = terminatedThreads.begin();
-                int smallestId = *(smallestIdPointer);
+                int smallestId = *(terminatedThreads.begin());
                 terminatedThreads.erase(smallestId);
                 return smallestId;
             }
-
-            if (currentMaxId < MAX_THREAD_NUM) {
+            // added +1 to condition because currentMaxId starts at 0, and we want to allow MAX_THREAD_NUM threads (0 to MAX_THREAD_NUM-1)
+            if (currentMaxId + 1 < MAX_THREAD_NUM) {
                 currentMaxId++;
                 return currentMaxId;
-            }
+            }   
             
             std::cerr << "thread library error: passed max threads number\n";
             return -1;
-    
         }
 
         int removeThreadId(int id){
@@ -128,9 +126,6 @@ class Thread {
             this->id = 0;
             this->entry_point = nullptr;
             this->stack = nullptr;
-            sigsetjmp(env, 1);
-            sigemptyset(&env->__saved_mask); 
-
             this->quantums = 1;
             this->isBlocked = false;
             this->remainingSleepQuantums = 0;
@@ -302,10 +297,11 @@ int self_terminate(int tid) {
     int nextTid = readyThreads.front();
     readyThreads.pop_front();
     runningThread = nextTid;
+
     threads.erase(tid);
+    blockedThreads.erase(tid);
     increment_quantum();
     siglongjmp(threads[runningThread]->getContext(), 1);
-    unblock_signal(SIGVTALRM);
     return 0;
 }
 
@@ -517,8 +513,13 @@ int uthread_resume(int tid) {
         return -1;
     }
     threads[tid]->setBlocked(false);
-    blockedThreads.erase(tid);
-    readyThreads.push_back(tid);
+    /* changed that because we need to also check if the thread is done sleeping*/
+    //blockedThreads.erase(tid);
+    //readyThreads.push_back(tid);
+    if (blockedThreads.find(tid) != blockedThreads.end() && threads[tid]->getRemainingSleepQuantums() == 0) {
+        blockedThreads.erase(tid);
+        readyThreads.push_back(tid);
+    }
     unblock_signal(SIGVTALRM);
     return 0;
 }
