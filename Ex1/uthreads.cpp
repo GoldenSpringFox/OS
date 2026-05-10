@@ -465,12 +465,13 @@ int uthread_block(int tid) {
         unblock_signal(SIGVTALRM);
         return 0;
     }
-    if (blockedThreads.find(tid) == blockedThreads.end()) {
+    if (threads[tid]->getIsBlocked()) {
         unblock_signal(SIGVTALRM);  
         return 0;
     }
     threads[tid]->setBlocked(true);
     blockedThreads.insert(tid);
+    readyThreads.remove(tid);
     unblock_signal(SIGVTALRM);
     return 0;
 }
@@ -497,6 +498,10 @@ int uthread_resume(int tid) {
         return -1;
     }
     threads[tid]->setBlocked(false);
+    if (threads[tid]->getRemainingSleepQuantums() > 0) {
+        unblock_signal(SIGVTALRM);
+        return 0;
+    }
     blockedThreads.erase(tid);
     readyThreads.push_back(tid);
     unblock_signal(SIGVTALRM);
