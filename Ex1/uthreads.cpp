@@ -82,7 +82,7 @@ class ThreadIdManager {
                 return smallestId;
             }
 
-            if (currentMaxId < MAX_THREAD_NUM) {
+            if (currentMaxId < MAX_THREAD_NUM - 1) {
                 currentMaxId++;
                 return currentMaxId;
             }
