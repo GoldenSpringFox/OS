@@ -465,7 +465,7 @@ int uthread_block(int tid) {
         unblock_signal(SIGVTALRM);
         return 0;
     }
-    if (blockedThreads.find(tid) != blockedThreads.end()) {
+    if (blockedThreads.find(tid) == blockedThreads.end()) {
         unblock_signal(SIGVTALRM);  
         return 0;
     }
@@ -540,7 +540,7 @@ int uthread_sleep(int num_quantums) {
         return -1;
     }
 
-    threads[runningThread]->setRemainingSleepQuantums(num_quantums);
+    threads[runningThread]->setRemainingSleepQuantums(num_quantums + 1);
     blockedThreads.insert(runningThread);
     context_switch();
     unblock_signal(SIGVTALRM);
