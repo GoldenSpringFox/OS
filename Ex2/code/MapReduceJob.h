@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <barrier>
 #include <condition_variable>
+#include <queue>
 
 // you can add other includes here
 
@@ -72,6 +73,8 @@ private:
 	bool isShuffleFinished;
 
 	void ShuffleIntermediateVectors();
+
+	std::queue<IntermediateVec> sameKeyVectorQueue;
 };
 	
 #endif // MAP_REDUCE_JOB_H

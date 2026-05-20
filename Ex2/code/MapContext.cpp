@@ -15,3 +15,17 @@ void MapContext::sortIntermediateByKey()
         }
     );
 }
+
+std::shared_ptr<K2> MapContext::getLastKey() {
+    return intermediateVector.back().first;
+}
+
+IntermediatePair MapContext::popLastPair() {
+    IntermediatePair lastPair = intermediateVector.back();
+    intermediateVector.pop_back();
+    return lastPair;
+}
+
+bool MapContext::isVectorEmpty() {
+    return intermediateVector.empty();
+}

@@ -20,6 +20,10 @@ public:
 
     void sortIntermediateByKey();
 
+    std::shared_ptr<K2> getLastKey();
+    IntermediatePair popLastPair();
+    bool isVectorEmpty();
+
 private:
     IntermediateVec intermediateVector;
 };

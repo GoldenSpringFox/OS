@@ -52,12 +52,45 @@ void MapReduceJob::MapReduceThread(int threadId)
 
 void MapReduceJob::ShuffleIntermediateVectors() 
 {
-    while (threadMapContexts.size() > 0) 
+    IntermediateVec sameKeyVector;
+    
+    bool areAllVectorsEmpty = false;
+    while (!areAllVectorsEmpty)
     {
+        std::shared_ptr maximumKey = threadMapContexts[0].getLastKey();
+        std::vector<int> vectorWithMaxKeyIndexes;
+
+        areAllVectorsEmpty = true;
+
         for (int i=0; i<threadMapContexts.size(); i++) {
+            if (!threadMapContexts[i].isVectorEmpty()) {
+                areAllVectorsEmpty = false;
+            }
             
+            std::shared_ptr currentKey = threadMapContexts[i].getLastKey();
+            if (*maximumKey < *currentKey) {
+                maximumKey = currentKey;
+                vectorWithMaxKeyIndexes.clear();
+                vectorWithMaxKeyIndexes.push_back(i);
+            }
+            if (areK2Equal(maximumKey, currentKey)) {
+                vectorWithMaxKeyIndexes.push_back(i);
+            }
+        }
+
+        if (sameKeyVector.size() != 0 && *maximumKey < *sameKeyVector[0].first) {
+            sameKeyVectorQueue.push(sameKeyVector);
+            sameKeyVector.clear();
+        }
+
+        for (int i=0; i<vectorWithMaxKeyIndexes.size(); i++) {
+            sameKeyVector.push_back(threadMapContexts[i].popLastPair());
         }
     }
+}
+
+bool areK2Equal(std::shared_ptr<K2> key1, std::shared_ptr<K2> key2) {
+    return !(*key1 < *key2) && !(*key2 < *key1);
 }
 
 MapReduceState MapReduceJob::getState(void) const
