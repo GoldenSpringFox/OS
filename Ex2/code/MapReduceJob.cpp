@@ -9,7 +9,7 @@ Implement:
 MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputVec, int multiThreadLevel)
     : client(client), inputVec(inputVec), preShuffleBarrier(multiThreadLevel)
 {
-    nextInputPairIndex = 0;
+    nextPairIndex = 0;
     isShuffleFinished = false;
 
 	if (multiThreadLevel > 0)
@@ -27,9 +27,8 @@ void MapReduceJob::MapReduceThread(int threadId)
 	threadMapContexts[threadId] = MapContext();
 
     // Map Phase
-    while (true) 
-    {
-        int index = nextInputPairIndex.fetch_add(1);
+    while (true) {
+        int index = nextPairIndex.fetch_add(1);
         if (index >= inputVec.size()) break;
         client.map(inputVec[index].first, inputVec[index].second, threadMapContexts[threadId]);
     }
@@ -46,8 +45,19 @@ void MapReduceJob::MapReduceThread(int threadId)
     }
     else {
         ShuffleIntermediateVectors();
+        std::unique_lock shuffleLock(shuffleMutex);
+        isShuffleFinished = true;
+        shuffleCV.notify_all();
     }
 
+    // Reduce Phase
+    nextPairIndex = 0;
+
+    while (true) {
+        int index = nextPairIndex.fetch_add(1);
+        if (index >= shuffledVector.size()) break;
+        client.reduce(shuffledVector[index], reduceContext);
+    }
 }
 
 void MapReduceJob::ShuffleIntermediateVectors() 
@@ -79,7 +89,7 @@ void MapReduceJob::ShuffleIntermediateVectors()
         }
 
         if (sameKeyVector.size() != 0 && *maximumKey < *sameKeyVector[0].first) {
-            sameKeyVectorQueue.push(sameKeyVector);
+            shuffledVector.push_back(sameKeyVector);
             sameKeyVector.clear();
         }
 

@@ -12,6 +12,9 @@ public:
     You can change everything else, including the constructor/desturctor
     You can also add fields here (even public ones)
     */
+
+private:
+    OutputVec outputVector;
 };
 
 #endif // REDUCE_CONTEXT_H

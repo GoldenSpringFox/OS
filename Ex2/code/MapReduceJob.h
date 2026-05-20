@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <barrier>
 #include <condition_variable>
-#include <queue>
 
 // you can add other includes here
 
@@ -63,7 +62,7 @@ private:
 	std::vector<std::thread> threads;
 	std::vector<MapContext> threadMapContexts;
 
-	std::atomic<int> nextInputPairIndex;
+	std::atomic<int> nextPairIndex;
 
 	void MapReduceThread(int threadId);
 
@@ -74,7 +73,9 @@ private:
 
 	void ShuffleIntermediateVectors();
 
-	std::queue<IntermediateVec> sameKeyVectorQueue;
+	std::vector<IntermediateVec> shuffledVector;
+
+	ReduceContext reduceContext;
 };
 	
 #endif // MAP_REDUCE_JOB_H
