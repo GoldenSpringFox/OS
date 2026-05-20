@@ -25,12 +25,19 @@ void MapReduceJob::MapReduceThread(int threadId)
 {
 	MapContext mapContext = MapContext();
 
+    // Map Phase
     while (true) 
     {
         int index = nextInputPairIndex.fetch_add(1);
         if (index >= inputVec.size()) break;
         client.map(inputVec[index].first, inputVec[index].second, mapContext);
     }
+
+    // Sort Phase
+    mapContext.sortIntermediateByKey();
+
+    // Shuffle Phase
+
 }
 
 MapReduceState MapReduceJob::getState(void) const

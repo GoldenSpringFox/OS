@@ -3,7 +3,9 @@
 
 #include "MapReduceClient.h"
 #include <thread>
+#include <atomic>
 #include <vector>
+#include <algorithm>
 
 // you can add other includes here
 
