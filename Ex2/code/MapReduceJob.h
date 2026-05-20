@@ -6,6 +6,8 @@
 #include <atomic>
 #include <vector>
 #include <algorithm>
+#include <barrier>
+#include <condition_variable>
 
 // you can add other includes here
 
@@ -58,10 +60,18 @@ private:
 	const InputVec inputVec;
 
 	std::vector<std::thread> threads;
+	std::vector<MapContext> threadMapContexts;
 
 	std::atomic<int> nextInputPairIndex;
 
 	void MapReduceThread(int threadId);
+
+	std::barrier<> preShuffleBarrier;
+	std::condition_variable shuffleCV;
+	std::mutex shuffleMutex;
+	bool isShuffleFinished;
+
+	void ShuffleIntermediateVectors();
 };
 	
 #endif // MAP_REDUCE_JOB_H

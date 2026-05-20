@@ -7,9 +7,10 @@ Implement:
 */
 
 MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputVec, int multiThreadLevel)
-    : client(client), inputVec(inputVec)
+    : client(client), inputVec(inputVec), preShuffleBarrier(multiThreadLevel)
 {
     nextInputPairIndex = 0;
+    isShuffleFinished = false;
 
 	if (multiThreadLevel > 0)
 	{
@@ -23,21 +24,40 @@ MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputV
 
 void MapReduceJob::MapReduceThread(int threadId)
 {
-	MapContext mapContext = MapContext();
+	threadMapContexts[threadId] = MapContext();
 
     // Map Phase
     while (true) 
     {
         int index = nextInputPairIndex.fetch_add(1);
         if (index >= inputVec.size()) break;
-        client.map(inputVec[index].first, inputVec[index].second, mapContext);
+        client.map(inputVec[index].first, inputVec[index].second, threadMapContexts[threadId]);
     }
 
     // Sort Phase
-    mapContext.sortIntermediateByKey();
+    threadMapContexts[threadId].sortIntermediateByKey();
 
     // Shuffle Phase
+    preShuffleBarrier.arrive_and_wait();
 
+    if (threadId != 0) {
+        std::unique_lock shuffleLock(shuffleMutex);
+        shuffleCV.wait(shuffleLock, [this]{ return this->isShuffleFinished; });
+    }
+    else {
+        ShuffleIntermediateVectors();
+    }
+
+}
+
+void MapReduceJob::ShuffleIntermediateVectors() 
+{
+    while (threadMapContexts.size() > 0) 
+    {
+        for (int i=0; i<threadMapContexts.size(); i++) {
+            
+        }
+    }
 }
 
 MapReduceState MapReduceJob::getState(void) const
