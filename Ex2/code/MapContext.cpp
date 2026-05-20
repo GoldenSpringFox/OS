@@ -4,5 +4,5 @@
 
 void MapContext::addIntermediate(std::shared_ptr<K2> key, std::shared_ptr<V2> value)
 {
-    // TODO: implement this function
+    intermediateVector.push_back(IntermediatePair(key, value));
 }

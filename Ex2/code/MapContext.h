@@ -2,7 +2,7 @@
 #define MAP_CONTEXT_H
 
 #include "MapReduceKeys.h"
-// you can add other includes as you wish
+#include "vector"
 
 class MapContext
 {
@@ -16,6 +16,9 @@ public:
     You can change everything else, including the constructor/desturctor
     You can also add fields here (even public ones)
     */
+
+private:
+    IntermediateVec intermediateVector;
 };
 
 #endif // MAP_CONTEXT_H

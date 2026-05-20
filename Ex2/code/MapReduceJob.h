@@ -2,6 +2,9 @@
 #define MAP_REDUCE_JOB_H
 
 #include "MapReduceClient.h"
+#include <thread>
+#include <vector>
+
 // you can add other includes here
 
 enum MapReduceStage
@@ -49,9 +52,14 @@ public:
 	OutputVec getOutput(void);
 
 private:
-	/*
-		You can change everything on this part (these are just recommendations)
-	*/
+	const MapReduceClient &client;
+	const InputVec inputVec;
+
+	std::vector<std::thread> threads;
+
+	std::atomic<int> nextInputPairIndex;
+
+	void MapReduceThread(int threadId);
 };
 	
 #endif // MAP_REDUCE_JOB_H

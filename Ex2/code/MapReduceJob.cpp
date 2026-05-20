@@ -7,8 +7,30 @@ Implement:
 */
 
 MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputVec, int multiThreadLevel)
+    : client(client), inputVec(inputVec)
 {
-    // TODO: implement this constructor
+    nextInputPairIndex = 0;
+
+	if (multiThreadLevel > 0)
+	{
+		threads.reserve(static_cast<size_t>(multiThreadLevel));
+		for (int i = 0; i < multiThreadLevel; ++i)
+		{
+			threads.emplace_back(&MapReduceJob::MapReduceThread, this, i);
+		}
+	}
+}
+
+void MapReduceJob::MapReduceThread(int threadId)
+{
+	MapContext mapContext = MapContext();
+
+    while (true) 
+    {
+        int index = nextInputPairIndex.fetch_add(1);
+        if (index >= inputVec.size()) break;
+        client.map(inputVec[index].first, inputVec[index].second, mapContext);
+    }
 }
 
 MapReduceState MapReduceJob::getState(void) const
