@@ -65,14 +65,10 @@ private:
 
 	std::atomic<int> nextPairIndex;
 
-	void MapReduceThread(int threadId);
-
 	std::barrier<> preShuffleBarrier;
 	std::condition_variable shuffleCV;
 	std::mutex shuffleMutex;
 	bool isShuffleFinished;
-
-	void ShuffleIntermediateVectors();
 
 	std::vector<IntermediateVec> shuffledVector;
 
@@ -82,6 +78,13 @@ private:
 
 	std::mutex waitMutex;
 	bool isCleanupDone;
+
+	std::atomic<uint64_t> currentState;
+
+	void MapReduceThread(int threadId);
+	void ShuffleIntermediateVectors();
+	bool areK2Equal(std::shared_ptr<K2> key1, std::shared_ptr<K2> key2);
+	void setNewStage(MapReduceStage stage);
 };
 	
 #endif // MAP_REDUCE_JOB_H

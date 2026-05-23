@@ -7,8 +7,10 @@ Implement:
 */
 
 MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputVec, int multiThreadLevel)
-    : client(client), inputVec(inputVec), threadCount(multiThreadLevel), threadMapContexts(multiThreadLevel), preShuffleBarrier(multiThreadLevel), 
-      isShuffleFinished(false), isCleanupDone(false), nextPairIndex(0), doneThreadsCount(0)
+    : client(client), inputVec(inputVec), threadCount(multiThreadLevel),
+      threadMapContexts(multiThreadLevel), nextPairIndex(0),
+      preShuffleBarrier(multiThreadLevel), isShuffleFinished(false),
+      doneThreadsCount(0), isCleanupDone(false)
 {
 	if (multiThreadLevel > 0)
 	{
@@ -20,6 +22,10 @@ MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputV
 	}
 }
 
+void setNewStage(MapReduceStage stage) {
+    
+}
+
 void MapReduceJob::MapReduceThread(int threadId)
 {
 	threadMapContexts[threadId] = MapContext();
@@ -27,7 +33,7 @@ void MapReduceJob::MapReduceThread(int threadId)
     // Map Phase
     while (true) {
         int index = nextPairIndex.fetch_add(1);
-        if (index >= inputVec.size()) break;
+        if (index >= static_cast<int>(inputVec.size())) break;
         client.map(inputVec[index].first, inputVec[index].second, threadMapContexts[threadId]);
     }
 
@@ -52,7 +58,7 @@ void MapReduceJob::MapReduceThread(int threadId)
     // Reduce Phase
     while (true) {
         int index = nextPairIndex.fetch_add(1);
-        if (index >= shuffledVector.size()) break;
+        if (index >= static_cast<int>(shuffledVector.size())) break;
         client.reduce(shuffledVector[index], reduceContext);
     }
 
@@ -75,7 +81,7 @@ void MapReduceJob::ShuffleIntermediateVectors()
 
         areAllVectorsEmpty = true;
 
-        for (int i=0; i<threadMapContexts.size(); i++) {
+        for (int i=0; i < static_cast<int>(threadMapContexts.size()); i++) {
             if (threadMapContexts[i].isVectorEmpty()) {
                 continue;
             }
@@ -107,7 +113,7 @@ void MapReduceJob::ShuffleIntermediateVectors()
             sameKeyVector.clear();
         }
 
-        for (int i=0; i<vectorWithMaxKeyIndexes.size(); i++) {
+        for (int i=0; i<static_cast<int>(vectorWithMaxKeyIndexes.size()); i++) {
             sameKeyVector.push_back(threadMapContexts[vectorWithMaxKeyIndexes[i]].popLastPair());
         }
     }
