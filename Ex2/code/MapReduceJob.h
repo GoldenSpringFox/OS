@@ -57,7 +57,8 @@ public:
 
 private:
 	const MapReduceClient &client;
-	const InputVec inputVec;
+	const InputVec &inputVec;
+	const int threadCount;
 
 	std::vector<std::thread> threads;
 	std::vector<MapContext> threadMapContexts;
@@ -76,6 +77,11 @@ private:
 	std::vector<IntermediateVec> shuffledVector;
 
 	ReduceContext reduceContext;
+
+	std::atomic<int> doneThreadsCount;
+
+	std::mutex waitMutex;
+	bool isCleanupDone;
 };
 	
 #endif // MAP_REDUCE_JOB_H
