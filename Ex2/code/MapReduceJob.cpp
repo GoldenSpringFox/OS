@@ -29,12 +29,16 @@ void MapReduceJob::setNewStage(MapReduceStage stage) {
     switch(stage) {
         case UNDEFINED_STAGE:
             totalToProcess = 0;
+            break;
         case MAP_STAGE:
             totalToProcess = inputVec.size();
+            break;
         case SHUFFLE_STAGE:
             totalToProcess = getIntermediatePairsCount();
+            break;
         case REDUCE_STAGE:
             totalToProcess = static_cast<int>(shuffledVector.size());
+            break;
     }
 
     uint64_t newStage = 0;
