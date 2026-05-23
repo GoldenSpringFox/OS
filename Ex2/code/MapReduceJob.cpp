@@ -9,6 +9,7 @@ Implement:
 MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputVec, int multiThreadLevel)
     : client(client), inputVec(inputVec), threadCount(multiThreadLevel),
       threadMapContexts(multiThreadLevel), nextPairIndex(0),
+      stageSwitchingBarrier(multiThreadLevel),
       preShuffleBarrier(multiThreadLevel), isShuffleFinished(false),
       doneThreadsCount(0), isCleanupDone(false)
 {
@@ -58,12 +59,19 @@ int MapReduceJob::getIntermediatePairsCount() {
 void MapReduceJob::MapReduceThread(int threadId)
 {
 	threadMapContexts[threadId] = MapContext();
+    // set map stage 
+    if (threadId == 0) {
+        setNewStage(MAP_STAGE);
+    }
+    //wait until thread 0 finish setting map stage
+    stageSwitchingBarrier.arrive_and_wait();
 
     // Map Phase
     while (true) {
         int index = nextPairIndex.fetch_add(1);
         if (index >= static_cast<int>(inputVec.size())) break;
         client.map(inputVec[index].first, inputVec[index].second, threadMapContexts[threadId]);
+        currentState.fetch_add(1);
     }
 
     // Sort Phase
@@ -77,9 +85,14 @@ void MapReduceJob::MapReduceThread(int threadId)
         shuffleCV.wait(shuffleLock, [this]{ return this->isShuffleFinished; });
     }
     else {
+        // thread 0 sets shuffle stage
+        setNewStage(SHUFFLE_STAGE);
         ShuffleIntermediateVectors();
         std::unique_lock shuffleLock(shuffleMutex);
         nextPairIndex = 0;
+        // set reduce stage
+        setNewStage(REDUCE_STAGE);
+
         isShuffleFinished = true;
         shuffleCV.notify_all();
     }
@@ -89,9 +102,10 @@ void MapReduceJob::MapReduceThread(int threadId)
         int index = nextPairIndex.fetch_add(1);
         if (index >= static_cast<int>(shuffledVector.size())) break;
         client.reduce(shuffledVector[index], reduceContext);
+        currentState.fetch_add(1);
     }
 
-    doneThreadsCount++;
+    doneThreadsCount.fetch_add(1);
 }
 
 bool areK2Equal(std::shared_ptr<K2> key1, std::shared_ptr<K2> key2) {

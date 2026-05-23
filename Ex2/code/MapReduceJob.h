@@ -64,7 +64,7 @@ private:
 	std::vector<MapContext> threadMapContexts;
 
 	std::atomic<int> nextPairIndex;
-
+	std::barrier<> stageSwitchingBarrier;
 	std::barrier<> preShuffleBarrier;
 	std::condition_variable shuffleCV;
 	std::mutex shuffleMutex;
