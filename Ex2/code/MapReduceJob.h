@@ -85,6 +85,7 @@ private:
 	void ShuffleIntermediateVectors();
 	bool areK2Equal(std::shared_ptr<K2> key1, std::shared_ptr<K2> key2);
 	void setNewStage(MapReduceStage stage);
+	int getIntermediatePairsCount();
 };
 	
 #endif // MAP_REDUCE_JOB_H

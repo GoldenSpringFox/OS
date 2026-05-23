@@ -29,3 +29,7 @@ IntermediatePair MapContext::popLastPair() {
 bool MapContext::isVectorEmpty() {
     return intermediateVector.empty();
 }
+
+int MapContext::getIntermediatePairCount() {
+    return static_cast<int>(intermediateVector.size());
+}

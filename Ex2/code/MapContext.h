@@ -23,6 +23,7 @@ public:
     std::shared_ptr<K2> getLastKey();
     IntermediatePair popLastPair();
     bool isVectorEmpty();
+    int getIntermediatePairCount();
 
 private:
     IntermediateVec intermediateVector;

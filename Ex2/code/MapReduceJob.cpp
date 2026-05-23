@@ -12,6 +12,8 @@ MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputV
       preShuffleBarrier(multiThreadLevel), isShuffleFinished(false),
       doneThreadsCount(0), isCleanupDone(false)
 {
+    setNewStage(UNDEFINED_STAGE);
+    
 	if (multiThreadLevel > 0)
 	{
 		threads.reserve(static_cast<size_t>(multiThreadLevel));
@@ -22,8 +24,31 @@ MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputV
 	}
 }
 
-void setNewStage(MapReduceStage stage) {
-    
+void MapReduceJob::setNewStage(MapReduceStage stage) {
+    int totalToProcess;
+    switch(stage) {
+        case UNDEFINED_STAGE:
+            totalToProcess = 0;
+        case MAP_STAGE:
+            totalToProcess = inputVec.size();
+        case SHUFFLE_STAGE:
+            totalToProcess = getIntermediatePairsCount();
+        case REDUCE_STAGE:
+            totalToProcess = static_cast<int>(shuffledVector.size());
+    }
+
+    uint64_t newStage = 0;
+    newStage += totalToProcess << 31;
+    newStage += stage << 62;
+    currentState.store(newStage);
+}
+
+int MapReduceJob::getIntermediatePairsCount() {
+    int sum = 0;
+    for (int i=0; i < static_cast<int>(threadMapContexts.size()); i++) {
+        sum += threadMapContexts[i].getIntermediatePairCount();
+    }
+    return sum;
 }
 
 void MapReduceJob::MapReduceThread(int threadId)
