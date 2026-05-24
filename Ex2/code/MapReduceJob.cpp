@@ -26,7 +26,7 @@ MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputV
 }
 
 void MapReduceJob::setNewStage(MapReduceStage stage) {
-    int totalToProcess;
+    int totalToProcess = 0;
     switch(stage) {
         case UNDEFINED_STAGE:
             totalToProcess = 0;
@@ -43,8 +43,8 @@ void MapReduceJob::setNewStage(MapReduceStage stage) {
     }
 
     uint64_t newStage = 0;
-    newStage += totalToProcess << 31;
-    newStage += stage << 62;
+    newStage += static_cast<uint64_t>(totalToProcess) << 31;
+    newStage += static_cast<uint64_t>(stage) << 62;
     currentState.store(newStage);
 }
 
@@ -88,6 +88,7 @@ void MapReduceJob::MapReduceThread(int threadId)
         // thread 0 sets shuffle stage
         setNewStage(SHUFFLE_STAGE);
         ShuffleIntermediateVectors();
+
         std::unique_lock shuffleLock(shuffleMutex);
         nextPairIndex = 0;
         // set reduce stage
@@ -158,6 +159,7 @@ void MapReduceJob::ShuffleIntermediateVectors()
 
         for (int i=0; i<static_cast<int>(vectorWithMaxKeyIndexes.size()); i++) {
             sameKeyVector.push_back(threadMapContexts[vectorWithMaxKeyIndexes[i]].popLastPair());
+            currentState.fetch_add(1);
         }
     }
 
@@ -168,7 +170,27 @@ void MapReduceJob::ShuffleIntermediateVectors()
 
 MapReduceState MapReduceJob::getState(void) const
 {
-    // TODO: implement this function
+    // capture the current state atomically
+    uint64_t state = currentState.load();
+    
+    MapReduceState mapReduceState;
+    mapReduceState.stage = static_cast<MapReduceStage>(state >> 62);
+
+    int totalToProcess = static_cast<int>((state >> 31) & 0x7FFFFFFF);
+
+    int processed = static_cast<int>(state & 0x7FFFFFFF);
+
+    // calculate percentage
+    if (totalToProcess == 0) {
+        mapReduceState.percentage = 0;
+    }
+    else {
+        if (processed > totalToProcess) {
+            processed = totalToProcess; 
+        }
+        mapReduceState.percentage = (static_cast<double>(processed) / totalToProcess) * 100.0;
+    }
+    return mapReduceState;
 }
 
 void MapReduceJob::wait(void)
@@ -196,7 +218,7 @@ OutputVec MapReduceJob::getOutput(void)
 
 bool MapReduceJob::isDone(void) const
 {
-    return doneThreadsCount == threadCount;
+    return doneThreadsCount.load() == threadCount;
 }
 
 MapReduceJob::~MapReduceJob()
