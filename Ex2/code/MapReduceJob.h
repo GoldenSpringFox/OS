@@ -63,8 +63,7 @@ private:
 	std::vector<std::thread> threads;
 	std::vector<MapContext> threadMapContexts;
 
-	std::atomic<int> nextPairIndex;
-	std::barrier<> stageSwitchingBarrier;
+	std::atomic<int> nextElementIndex;
 	std::barrier<> preShuffleBarrier;
 	std::condition_variable shuffleCV;
 	std::mutex shuffleMutex;
@@ -86,6 +85,8 @@ private:
 	bool areK2Equal(std::shared_ptr<K2> key1, std::shared_ptr<K2> key2);
 	void setNewStage(MapReduceStage stage);
 	int getIntermediatePairsCount();
+	int getShuffledVectorSize();
+	int getShuffledVectorSize();
 };
 	
 #endif // MAP_REDUCE_JOB_H

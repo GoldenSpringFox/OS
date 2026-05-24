@@ -8,8 +8,7 @@ Implement:
 
 MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputVec, int multiThreadLevel)
     : client(client), inputVec(inputVec), threadCount(multiThreadLevel),
-      threadMapContexts(multiThreadLevel), nextPairIndex(0),
-      stageSwitchingBarrier(multiThreadLevel),
+      threadMapContexts(multiThreadLevel), nextElementIndex(0),
       preShuffleBarrier(multiThreadLevel), isShuffleFinished(false),
       doneThreadsCount(0), isCleanupDone(false)
 {
@@ -18,11 +17,16 @@ MapReduceJob::MapReduceJob(const MapReduceClient &client, const InputVec &inputV
 	if (multiThreadLevel > 0)
 	{
 		threads.reserve(static_cast<size_t>(multiThreadLevel));
-		for (int i = 0; i < multiThreadLevel; ++i)
+		
+        setNewStage(MAP_STAGE);
+        for (int i = 0; i < multiThreadLevel; ++i)
 		{
 			threads.emplace_back(&MapReduceJob::MapReduceThread, this, i);
 		}
 	}
+    else {
+        setNewStage(REDUCE_STAGE);
+    }
 }
 
 void MapReduceJob::setNewStage(MapReduceStage stage) {
@@ -38,7 +42,7 @@ void MapReduceJob::setNewStage(MapReduceStage stage) {
             totalToProcess = getIntermediatePairsCount();
             break;
         case REDUCE_STAGE:
-            totalToProcess = static_cast<int>(shuffledVector.size());
+            totalToProcess = getShuffledVectorSize();
             break;
     }
 
@@ -56,19 +60,21 @@ int MapReduceJob::getIntermediatePairsCount() {
     return sum;
 }
 
+int MapReduceJob::getShuffledVectorSize() {
+    int sum = 0;
+    for (int i=0; i < static_cast<int>(shuffledVector.size()); i++) {
+        sum += shuffledVector[i].size();
+    }
+    return sum;
+}
+
 void MapReduceJob::MapReduceThread(int threadId)
 {
 	threadMapContexts[threadId] = MapContext();
-    // set map stage 
-    if (threadId == 0) {
-        setNewStage(MAP_STAGE);
-    }
-    //wait until thread 0 finish setting map stage
-    stageSwitchingBarrier.arrive_and_wait();
 
     // Map Phase
     while (true) {
-        int index = nextPairIndex.fetch_add(1);
+        int index = nextElementIndex.fetch_add(1);
         if (index >= static_cast<int>(inputVec.size())) break;
         client.map(inputVec[index].first, inputVec[index].second, threadMapContexts[threadId]);
         currentState.fetch_add(1);
@@ -90,7 +96,7 @@ void MapReduceJob::MapReduceThread(int threadId)
         ShuffleIntermediateVectors();
 
         std::unique_lock shuffleLock(shuffleMutex);
-        nextPairIndex = 0;
+        nextElementIndex = 0;
         // set reduce stage
         setNewStage(REDUCE_STAGE);
 
@@ -100,10 +106,10 @@ void MapReduceJob::MapReduceThread(int threadId)
 
     // Reduce Phase
     while (true) {
-        int index = nextPairIndex.fetch_add(1);
+        int index = nextElementIndex.fetch_add(1);
         if (index >= static_cast<int>(shuffledVector.size())) break;
         client.reduce(shuffledVector[index], reduceContext);
-        currentState.fetch_add(1);
+        currentState.fetch_add(shuffledVector[index].size());
     }
 
     doneThreadsCount.fetch_add(1);
