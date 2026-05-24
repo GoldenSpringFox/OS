@@ -86,7 +86,6 @@ private:
 	void setNewStage(MapReduceStage stage);
 	int getIntermediatePairsCount();
 	int getShuffledVectorSize();
-	int getShuffledVectorSize();
 };
 	
 #endif // MAP_REDUCE_JOB_H

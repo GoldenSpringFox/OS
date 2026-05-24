@@ -115,7 +115,7 @@ void MapReduceJob::MapReduceThread(int threadId)
     doneThreadsCount.fetch_add(1);
 }
 
-bool areK2Equal(std::shared_ptr<K2> key1, std::shared_ptr<K2> key2) {
+bool MapReduceJob::areK2Equal(std::shared_ptr<K2> key1, std::shared_ptr<K2> key2) {
     return !(*key1 < *key2) && !(*key2 < *key1);
 }
 
