@@ -1,8 +1,12 @@
+#include "PhysicalMemory.h"
+
 /*
  * Initialize the virtual memory
  */
 void VMinitialize(){
-    PMwrite(0, 0);
+    for (uint64_t i=0; i<PAGE_SIZE; i++) {
+        PMwrite(i, 0);
+    }
 }
 
 /* reads a word from the given virtual address
@@ -35,22 +39,25 @@ int VMread(uint64_t virtualAddress, word_t* value){
  * Does not allocate or restore anything — purely a read-only table walk.
  */
 uint64_t VMgetMapping(uint64_t virtualPage){
-    return pageTableStep(virtualPage, 0, 0);
+    return stepThroughPageTable(virtualPage, 0, 0);
 }
 
-uint64_t pageTableStep(uint64_t virtualPage, uint64_t currentFrame, uint64_t level){
-
+uint64_t stepThroughPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t level){
     if (level == TABLES_DEPTH) {
         return currentFrame;
     } 
-    uint64_t pageTableAddress = getPageTableAdressFromVirtual(virtualPage, level);
-    uint64_t nextFrame;
-    PMread(currentFrame+pageTableAddress, &nextFrame);
 
-    return pageTableStep(virtualPage, nextFrame, level+1);
+    uint64_t pageTableRow = decomposeVirtualAddress(virtualPage, level);
+    word_t nextFrame;
+    PMread(currentFrame + pageTableRow, &nextFrame);
+
+    if (nextFrame == 0) {
+        return 0;
+    }
+
+    return stepThroughPageTable(virtualPage, nextFrame, level+1);
 }
 
-
-uint64_t getPageTableAdressFromVirtual(uint64_t virtualPage, uint64_t level) {
-    return Page >> ((TABLES_DEPTH-level) * OFFSET_WIDTH) & ((1 << OFFSET_WIDTH) - 1);
+uint64_t decomposeVirtualAddress(uint64_t virtualPage, uint64_t level) {
+    return virtualPage >> ((TABLES_DEPTH-level) * OFFSET_WIDTH) & (PAGE_SIZE - 1);
 }
