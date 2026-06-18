@@ -17,7 +17,7 @@ uint64_t decomposeVirtualPage(uint64_t virtualPage, uint64_t level);
 uint64_t chooseVictim(uint64_t virtualPage, uint64_t lastCreatedPageTable);
 uint64_t calculateCyclicalDistance(uint64_t page1, uint64_t page2);
 uint64_t findInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t level);
-bool findVictimInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t parentPageTableEntry,
+bool findVictimInPageTable(uint64_t virtualPage, uint64_t lastCreatedPageTable, uint64_t currentFrame, uint64_t parentPageTableEntry,
     uint64_t level, uint64_t currentPage, VictimInformation* currentVictim, uint64_t* maxFrameIndex);
 
 
@@ -105,6 +105,7 @@ uint64_t handlePageFault(uint64_t virtualPage) {
 
         if (level + 1 < TABLES_DEPTH) {
             resetPageTable(victimFrame);
+            lastCreatedPageTable = victimFrame;
         }
         else {
             PMrestore(victimFrame, virtualPage);
@@ -118,10 +119,12 @@ uint64_t handlePageFault(uint64_t virtualPage) {
 
 uint64_t chooseVictim(uint64_t virtualPage, uint64_t lastCreatedPageTable) {
     VictimInformation victim;
-    victim.cyclicalDistance = VIRTUAL_MEMORY_SIZE; 
+    victim.cyclicalDistance = 0;
+    victim.isPageTable = false;
+    victim.pageNumber = VIRTUAL_MEMORY_SIZE;
     uint64_t maxFrameIndex = 0;
 
-    findVictimInPageTable(virtualPage, 0, 0, 0, 0, &victim, &maxFrameIndex);
+    findVictimInPageTable(virtualPage, lastCreatedPageTable, 0, 0, 0, 0, &victim, &maxFrameIndex);
 
     if (victim.isPageTable) {
         PMwrite(victim.parentPageTableEntry, 0);
@@ -139,7 +142,7 @@ uint64_t chooseVictim(uint64_t virtualPage, uint64_t lastCreatedPageTable) {
 }
 
 /* return true to exit DFS early */
-bool findVictimInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t parentPageTableEntry,
+bool findVictimInPageTable(uint64_t virtualPage, uint64_t lastCreatedPageTable, uint64_t currentFrame, uint64_t parentPageTableEntry,
     uint64_t level, uint64_t currentPage, VictimInformation* currentVictim, uint64_t* maxFrameIndex){
     if (currentFrame > *maxFrameIndex) {
         *maxFrameIndex = currentFrame;
@@ -164,13 +167,13 @@ bool findVictimInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t
             PMread(pageTableEntry, &nextFrame);
             if (nextFrame != 0) {
                 isPageTableEmpty = false;
-                bool exitEarly = findVictimInPageTable(virtualPage, nextFrame, pageTableEntry,
+                bool exitEarly = findVictimInPageTable(virtualPage, lastCreatedPageTable, nextFrame, pageTableEntry,
                     level + 1, currentPage * PAGE_SIZE + row, currentVictim, maxFrameIndex);
                 if (exitEarly) return true;
             }
         }
 
-        if (isPageTableEmpty) {
+        if (isPageTableEmpty && currentFrame != 0 && currentFrame != lastCreatedPageTable) {
             currentVictim->pageNumber = virtualPage;
             currentVictim->frame = currentFrame;
             currentVictim->parentPageTableEntry = parentPageTableEntry;
@@ -212,5 +215,5 @@ uint64_t findInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t l
 }
 
 uint64_t decomposeVirtualPage(uint64_t virtualPage, uint64_t level) {
-    return virtualPage >> ((TABLES_DEPTH-level) * OFFSET_WIDTH) & (PAGE_SIZE - 1);
+    return virtualPage >> ((TABLES_DEPTH - level - 1) * OFFSET_WIDTH) & (PAGE_SIZE - 1);
 }
