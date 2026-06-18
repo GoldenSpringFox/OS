@@ -103,30 +103,56 @@ struct VictimInformation
     uint64_t pageNumber;
     uint64_t frame;
     uint64_t parentFrame;
-    uint64_t CyclicalDistance;
     bool needsEviction;
+    uint64_t CyclicalDistance; 
 };
 
 VictimInformation chooseVictim(uint64_t virtualPage, uint64_t lastCreatedPageTable) {
     VictimInformation currentVictim;
-    uint64_t maxFrameDistance;
+    currentVictim->CyclicalDistance = VIRTUAL_MEMORY_SIZE; 
+    uint64_t maxFrameIndex = 0;
 
-    //findVictimInPageTable(virtualPage, 0, 0, &currentVictim, &currentVictimParent, &maxFrameIndex, &maxCyclicalDistance);
+    findVictimInPageTable(virtualPage, 0, 0, 0, &currentVictim, &maxFrameIndex);
 }
 
 
-void findVictimInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t level, uint64_t* currentVictim, uint64_t* currentVictimParent, uint64_t* maxFrameIndex, uint64_t* maxCyclicalDistance) {
+void findVictimInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t level, 
+    uint64_t currentPageNumber, VictimInformation* currentVictim, uint64_t* maxFrameIndex){
+    if (currentFrame > *maxFrameIndex) {
+        *maxFrameIndex = currentFrame;
+    }
     if (level == TABLES_DEPTH) {
         // calculate cyclic distance
+        uint64_t cyclicalDistance = calculateCyclicalDistance(virtualPage, *currentPageNumber);
         // compare to current victim
+        if (cyclicalDistance > currentVictim->CyclicalDistance || 
+            (currentPageNumber < currentVictim->pageNumber &&
+            cyclicalDistance == currentVictim->CyclicalDistance) ) {
+            currentVictim->CyclicalDistance = cyclicalDistance;
+            currentVictim->pageNumber = virtualPage;
+            currentVictim->frame = currentFrame;
+            currentVictim->needsEviction = true;
+        } 
         return;
     }
     else {
-        // 
+        bool isPageTableEmpty = true;
+        for (int i = 0; i < PAGE_SIZE; i++) {
+            uint64_t nextFrame; 
+            PMread(currentFrame * PAGE_SIZE + i, &nextFrame);
+            if (nextFrame != 0) {
+                isPageTableEmpty = false;
+                findVictimInPageTable(virtualPage, nextFrame, level + 1, 
+                    currentPageNumber * PAGE_SIZE + i, currentVictim, maxFrameIndex);
+            }
+        }
     }
-
 }
 
+uint64_t calculateCyclicalDistance(uint64_t page1, uint64_t page2) {
+    uint64_t distance = (page1 > page2) ? page1 - page2 : page2 - page1;
+    return (distance > NUM_PAGES / 2) ? NUM_PAGES - distance : distance;
+}
 
 /* Returns the physical frame index that virtualPage currently maps to,
  * or 0 if the page is not resident in RAM (never written or was evicted).
