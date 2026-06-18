@@ -7,9 +7,9 @@ void VMinitialize(){
     resetPageTable(0);
 }
 
-void resetPageTable(uint64_t pageTableAddress) {
+void resetPageTable(uint64_t frame) {
     for (uint64_t i=0; i<PAGE_SIZE; i++) {
-        PMwrite(pageTableAddress * PAGE_SIZE + i, 0);
+        PMwrite(frame * PAGE_SIZE + i, 0);
     }
 }
 
@@ -74,25 +74,22 @@ uint64_t handlePageFault(uint64_t virtualPage) {
         uint64_t pageTableRow = decomposeVirtualPage(virtualPage, level);
         PMread(currentAddress * PAGE_SIZE + pageTableRow, &nextAddress);
 
-        if (nextAddress == 0) {
-            VictimInformation victim = chooseVictim(virtualPage, lastCreatedPageTable);
-            if (victim.needsEviction) {
-                PMevict(victim.frame, victim.pageNumber);
-            }
-            
-            if (level+1 < TABLES_DEPTH) {
-                resetPageTable(victim.frame);
-            }
-            else {
-                PMrestore(victim.frame, virtualPage);
-            }
-
-            PMwrite(currentAddress * PAGE_SIZE + pageTableRow, victim.frame);
-
-            nextAddress = victim.frame;
+        if (nextAddress != 0) {
+            currentAddress = nextAddress;
+            continue;
         }
 
-        currentAddress = nextAddress;
+        uint64_t victim = chooseVictim(virtualPage, lastCreatedPageTable);
+        PMwrite(currentAddress * PAGE_SIZE + pageTableRow, victim);
+
+        if (level + 1 < TABLES_DEPTH) {
+            resetPageTable(victim);
+        }
+        else {
+            PMrestore(victim, virtualPage);
+        }
+
+        currentAddress = victim;
     }
 
     return currentAddress;
@@ -102,51 +99,75 @@ struct VictimInformation
 {
     uint64_t pageNumber;
     uint64_t frame;
-    uint64_t parentFrame;
-    bool needsEviction;
-    uint64_t CyclicalDistance; 
+    uint64_t parentPageTableEntry;
+    uint64_t cyclicalDistance;
+    bool isPageTable;
 };
 
-VictimInformation chooseVictim(uint64_t virtualPage, uint64_t lastCreatedPageTable) {
-    VictimInformation currentVictim;
-    currentVictim->CyclicalDistance = VIRTUAL_MEMORY_SIZE; 
+uint64_t chooseVictim(uint64_t virtualPage, uint64_t lastCreatedPageTable) {
+    VictimInformation victim;
+    victim.cyclicalDistance = VIRTUAL_MEMORY_SIZE; 
     uint64_t maxFrameIndex = 0;
 
-    findVictimInPageTable(virtualPage, 0, 0, 0, &currentVictim, &maxFrameIndex);
+    findVictimInPageTable(virtualPage, 0, 0, 0, 0, &victim, &maxFrameIndex);
+
+    if (victim.isPageTable) {
+        PMwrite(victim.parentPageTableEntry, 0);
+        return victim.frame;
+    }
+    
+    if (maxFrameIndex + 1 < NUM_FRAMES) {
+        return maxFrameIndex + 1;
+    }
+
+    PMevict(victim.frame, victim.pageNumber);
+    PMwrite(victim.parentPageTableEntry, 0);
+
+    return victim.frame;
 }
 
-
-void findVictimInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t level, 
-    uint64_t currentPageNumber, VictimInformation* currentVictim, uint64_t* maxFrameIndex){
+/* return true to exit DFS early */
+bool findVictimInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t parentPageTableEntry,
+    uint64_t level, uint64_t currentPage, VictimInformation* currentVictim, uint64_t* maxFrameIndex){
     if (currentFrame > *maxFrameIndex) {
         *maxFrameIndex = currentFrame;
     }
     if (level == TABLES_DEPTH) {
-        // calculate cyclic distance
-        uint64_t cyclicalDistance = calculateCyclicalDistance(virtualPage, *currentPageNumber);
-        // compare to current victim
-        if (cyclicalDistance > currentVictim->CyclicalDistance || 
-            (currentPageNumber < currentVictim->pageNumber &&
-            cyclicalDistance == currentVictim->CyclicalDistance) ) {
-            currentVictim->CyclicalDistance = cyclicalDistance;
-            currentVictim->pageNumber = virtualPage;
+        uint64_t cyclicalDistance = calculateCyclicalDistance(virtualPage, currentPage);
+        
+        if (cyclicalDistance > currentVictim->cyclicalDistance || (cyclicalDistance == currentVictim->cyclicalDistance && currentPage < currentVictim->pageNumber)) {
+            currentVictim->cyclicalDistance = cyclicalDistance;
+            currentVictim->pageNumber = currentPage;
             currentVictim->frame = currentFrame;
-            currentVictim->needsEviction = true;
+            currentVictim->parentPageTableEntry = parentPageTableEntry;
+            currentVictim->isPageTable = false;
         } 
-        return;
+        return false;
     }
     else {
         bool isPageTableEmpty = true;
-        for (int i = 0; i < PAGE_SIZE; i++) {
-            uint64_t nextFrame; 
-            PMread(currentFrame * PAGE_SIZE + i, &nextFrame);
+        for (int row = 0; row < PAGE_SIZE; row++) {
+            word_t nextFrame;
+            uint64_t pageTableEntry = currentFrame * PAGE_SIZE + row;
+            PMread(pageTableEntry, &nextFrame);
             if (nextFrame != 0) {
                 isPageTableEmpty = false;
-                findVictimInPageTable(virtualPage, nextFrame, level + 1, 
-                    currentPageNumber * PAGE_SIZE + i, currentVictim, maxFrameIndex);
+                bool exitEarly = findVictimInPageTable(virtualPage, nextFrame, pageTableEntry,
+                    level + 1, currentPage * PAGE_SIZE + row, currentVictim, maxFrameIndex);
+                if (exitEarly) return true;
             }
         }
+
+        if (isPageTableEmpty) {
+            currentVictim->pageNumber = virtualPage;
+            currentVictim->frame = currentFrame;
+            currentVictim->parentPageTableEntry = parentPageTableEntry;
+            currentVictim->isPageTable = true;
+            return true;
+        }
     }
+
+    return false;
 }
 
 uint64_t calculateCyclicalDistance(uint64_t page1, uint64_t page2) {
