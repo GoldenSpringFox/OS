@@ -1,4 +1,25 @@
+#include "VirtualMemory.h"
 #include "PhysicalMemory.h"
+
+struct VictimInformation {
+    uint64_t pageNumber;
+    uint64_t frame;
+    uint64_t parentPageTableEntry;
+    uint64_t cyclicalDistance;
+    bool isPageTable;
+};
+
+// Forward declarations
+void resetPageTable(uint64_t frame);
+uint64_t VMgetMapping(uint64_t virtualPage);
+uint64_t handlePageFault(uint64_t virtualPage);
+uint64_t decomposeVirtualPage(uint64_t virtualPage, uint64_t level);
+uint64_t chooseVictim(uint64_t virtualPage, uint64_t lastCreatedPageTable);
+uint64_t calculateCyclicalDistance(uint64_t page1, uint64_t page2);
+uint64_t findInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t level);
+bool findVictimInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t parentPageTableEntry,
+    uint64_t level, uint64_t currentPage, VictimInformation* currentVictim, uint64_t* maxFrameIndex);
+
 
 /*
  * Initialize the virtual memory
@@ -79,30 +100,21 @@ uint64_t handlePageFault(uint64_t virtualPage) {
             continue;
         }
 
-        uint64_t victim = chooseVictim(virtualPage, lastCreatedPageTable);
-        PMwrite(currentAddress * PAGE_SIZE + pageTableRow, victim);
+        uint64_t victimFrame = chooseVictim(virtualPage, lastCreatedPageTable);
+        PMwrite(currentAddress * PAGE_SIZE + pageTableRow, victimFrame);
 
         if (level + 1 < TABLES_DEPTH) {
-            resetPageTable(victim);
+            resetPageTable(victimFrame);
         }
         else {
-            PMrestore(victim, virtualPage);
+            PMrestore(victimFrame, virtualPage);
         }
 
-        currentAddress = victim;
+        currentAddress = victimFrame;
     }
 
     return currentAddress;
 }
-
-struct VictimInformation 
-{
-    uint64_t pageNumber;
-    uint64_t frame;
-    uint64_t parentPageTableEntry;
-    uint64_t cyclicalDistance;
-    bool isPageTable;
-};
 
 uint64_t chooseVictim(uint64_t virtualPage, uint64_t lastCreatedPageTable) {
     VictimInformation victim;
@@ -179,7 +191,7 @@ uint64_t calculateCyclicalDistance(uint64_t page1, uint64_t page2) {
  * or 0 if the page is not resident in RAM (never written or was evicted).
  * Does not allocate or restore anything — purely a read-only table walk.
  */
-uint64_t VMgetMapping(uint64_t virtualPage){
+uint64_t VMgetMapping(uint64_t virtualPage) {
     return findInPageTable(virtualPage, 0, 0);
 }
 
@@ -190,7 +202,7 @@ uint64_t findInPageTable(uint64_t virtualPage, uint64_t currentFrame, uint64_t l
 
     uint64_t pageTableRow = decomposeVirtualPage(virtualPage, level);
     word_t nextFrame;
-    PMread(currentFrame + pageTableRow, &nextFrame);
+    PMread(currentFrame * PAGE_SIZE + pageTableRow, &nextFrame);
 
     if (nextFrame == 0) {
         return 0;

@@ -1,0 +1,3 @@
+g++ -Wall -Werror -Wpedantic --std=c++17 -I. src/VirtualMemory.cpp tests/test0_sanity.cpp -o program && ./program
+
+valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./program
